@@ -3,7 +3,7 @@
     "path": "~/Documents/GitHub/SDM-GEE/Chapter-SDM.Rmd",
     "project_path": "Chapter-SDM.Rmd",
     "type": "r_markdown",
-    "hash": "0",
+    "hash": "1095078124",
     "contents": "",
     "dirty": false,
     "created": 1625047916062.0,
@@ -12,15 +12,15 @@
     "properties": {
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "21,137",
-        "scrollLine": "9"
+        "cursorPosition": "1,63",
+        "scrollLine": "0"
     },
     "folds": "",
-    "lastKnownWriteTime": 1625136812,
+    "lastKnownWriteTime": 1625138040,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1625136812128,
+    "last_content_update": 1625138040752,
     "read_only": false,
     "read_only_alternatives": []
 }
