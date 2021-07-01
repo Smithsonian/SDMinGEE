@@ -588,7 +588,7 @@ right.add(legend2);
 
 In the next section we will calculate the Area Under the Curve of the Receiver Operator Characteristic (AUC-ROC)(Fielding and Bell, 1997) and the Area Under the Precision-Recall Curve (AUC-PR; Sofaer, Hoeting, & Jarnevich, 2019) for each run using the validation data sets. We will then calculate the mean AUC-ROC and AUC-PR for the n iterations.
 
-It is important to check that you have a sufficient number of points for model validation at each run. Because the final number of points depend on the random split of blocks, you want to make sure there are enough points. Because in this workflow presence and pseudo-absence data are balanced, the final number of validation points is the count of presence and pseudo-absences available for validation of each iteration. 
+It is important to check that you have a sufficient number of points for model validation at each run. Because the final number of points depend on the random split of blocks, you want to make sure there are enough presence and pseudo-absence points for model validation. 
 
 ```{js, eval=F}
 /////////////////////////////////////
@@ -600,9 +600,11 @@ var TestingDatasets = ee.List.sequence(3,ee.Number(numiter).multiply(4).subtract
                       return results.get(x)});
 
 // Double check that you have a satisfactory number of points for model validation
-print('Number of points for evaluation', ee.List.sequence(0,ee.Number(numiter).subtract(1),1)
+print('Number of presence and pseudo-absence points for model validation', ee.List.sequence(0,ee.Number(numiter).subtract(1),1)
 .map(function(x){
-  return ee.FeatureCollection(TestingDatasets.get(x)).size()})
+  return ee.List([ee.FeatureCollection(TestingDatasets.get(x)).filter(ee.Filter.eq('PresAbs',1)).size(),
+         ee.FeatureCollection(TestingDatasets.get(x)).filter(ee.Filter.eq('PresAbs',0)).size()]);
+})
 );
 
 // Define functions to estimate, sensitivity, specificity and precision at different thresholds.
@@ -1291,58 +1293,85 @@ It is important that the data set that is uploaded into GEE as an asset contains
 ```{js, eval=F}
 // Presence absence model
 
-//////////////////////////////
+///////////////////////////////
 // Section 1 - Species data
-//////////////////////////////
+///////////////////////////////
 
 // Load presence absence data
-var Data = ee.FeatureCollection('users/yourdata');
+//var Data = ee.FeatureCollection('users/yourdata');
+var Data = table
 print('Data size:', Data.size());
 
-// Define grid size to work with (m)
-var GrainSize = 5000;
+// Define spatial resolution to work with (m)
+var GrainSize = 1000;
+
+
+// Add two maps to the screen.
+var left = ui.Map();
+var right = ui.Map();
+ui.root.clear();
+ui.root.add(left);
+ui.root.add(right);
+
+// Link maps, so when you drag one map, the other will be moved in sync.
+ui.Map.Linker([left, right], 'change-bounds');
 
 // Add presence points to the map
-Map.addLayer(Data, {color:'red'}, 'Presence', 1);
+// Visualize presence points on the map
+//right.addLayer(Data, {color:'red'}, 'Data', 1);
+//left.addLayer(Data, {color:'red'}, 'Data', 1);
 
 ////////////////////////////////////////
 // Section 2 - Define Area of Interest
 ////////////////////////////////////////
 
 // Define the AOI
-var AOI = Data.geometry().bounds().buffer(100000);
+var AOI = Data.geometry().bounds().buffer(10000);
 
 // Add border of study area to the map
 var outline = ee.Image().byte().paint({
   featureCollection: AOI, color: 1, width: 3});
-Map.addLayer(outline, {palette: 'FF0000'}, "Study Area");
-  
-// Center map to the area of interest
-Map.centerObject(AOI, 10); //Number indicates the zoom level
-  
-////////////////////////////////////////////////
-// Section 3 - Selecting Predictor Variables
-////////////////////////////////////////////////
+right.addLayer(outline, {palette: 'FF0000'}, "Study Area");
+left.addLayer(outline, {palette: 'FF0000'}, "Study Area");
 
+// Center map to the area of interest
+right.centerObject(AOI, 9); //Number indicates the zoom level
+left.centerObject(AOI, 9); //Number indicates the zoom level
+
+
+//////////////////////////////////////////////
+// Section 3 - Selecting Predictor Variables
+//////////////////////////////////////////////
+
+// Here as an example we are using elevation data.
 // Load elevation data from the data catalog and calculate slope, aspect, and a simple hillshade from the terrain Digital Elevation Model.
 var Terrain = ee.Algorithms.Terrain(ee.Image("USGS/SRTMGL1_003"));
 var Terrain = Terrain.select(['elevation','slope','aspect']); // Select elevation, slope and aspect
 
+// Load NDVI 250 m collection and estimate median value per pixel
+var MODIS = ee.ImageCollection("MODIS/006/MOD13Q1");
+var MedianNDVI = MODIS.filterDate('2003-01-01', '2020-12-31').select(['NDVI']).median();
+
 // Combine bands into a single image
-var predictors = Terrain.clip(AOI);
+var predictors = Terrain.addBands(MedianNDVI).clip(AOI);
 
 // Select bands for modeling
-var bands = ['elevation','slope','aspect'];
+var bands = ['elevation','slope','aspect','NDVI'];
 var predictors = predictors.select(bands);
 
-Map.addLayer(predictors.clip(AOI), {bands:['elevation'], min: 900, max: 1700,  palette: ['000000','006600', '009900','33CC00','996600','CC9900','CC9966','FFFFFF',]}, 'Elevation (m)', 0);
-Map.addLayer(predictors.clip(AOI), {bands:['slope'], min: 0, max: 45, palette:'white,red'}, 'Slope (Degrees)', 0); 
-Map.addLayer(predictors.clip(AOI), {bands:['aspect'], min: 0, max: 350, palette:'red,blue'}, 'Aspect (Degrees)', 0); 
+// Mask ocean from predictor variables
+var watermask =  Terrain.select('elevation').gt(0); //Create a water mask
+var predictors = predictors.updateMask(watermask).clip(AOI);
+
+left.addLayer(predictors.clip(AOI), {bands:['elevation'], min: 900, max: 1700,  palette: ['000000','006600', '009900','33CC00','996600','CC9900','CC9966','FFFFFF',]}, 'Elevation (m)', 0);
+left.addLayer(predictors.clip(AOI), {bands:['slope'], min: 0, max: 45, palette:'white,red'}, 'Slope (Degrees)', 0); 
+left.addLayer(predictors.clip(AOI), {bands:['aspect'], min: 0, max: 350, palette:'red,blue'}, 'Aspect (Degrees)', 0); 
 
 // Estimate correlation among predictor variables
 
 // Extract local covariate values from multiband predictor image at training points
-var PixelVals = predictors.sampleRegions({collection: Data, scale: GrainSize, tileScale: 16});
+var DataCor = predictors.sample({scale: GrainSize, numPixels: 5000, geometries: true}); //Generate 5000 random points
+var PixelVals = predictors.sampleRegions({collection: DataCor, scale: GrainSize, tileScale: 16}); //Extract covariate values
 
 // To check all pairwise correlations we need to map the reduceColumns function across all pairwise combinations of predictors
 var CorrAll = predictors.bandNames().map(function(i){
@@ -1357,9 +1386,55 @@ var CorrAll = predictors.bandNames().map(function(i){
   });
 print('Variables correlation matrix',CorrAll);
 
-///////////////////////////////////
-// Section 4 - Fitting SDM models
-///////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////
+// Section 4 - Defining blocks blocks to fold randomly for cross validation
+/////////////////////////////////////////////////////////////////////////////
+
+// Make an image out of the presence locations to mask from the area to generate pseudo-absences.
+// This will impede having presence and pseudo-absences in an area twice the defined grain size.
+var mask = Data
+  .reduceToImage({
+    properties: ['random'],
+    reducer: ee.Reducer.first()
+}).reproject('EPSG:4326', null, ee.Number(GrainSize));
+
+var AreaForPA = mask.mask().updateMask(watermask).clip(AOI); //Activate this line for using the entire AOI for generating random points
+
+// Define a function to create a grid over AOI
+function makeGrid(geometry, scale) {
+  // pixelLonLat returns an image with each pixel labeled with longitude and
+  // latitude values.
+  var lonLat = ee.Image.pixelLonLat();
+  // Select the longitude and latitude bands, multiply by a large number then
+  // truncate them to integers.
+  var lonGrid = lonLat
+    .select('longitude')
+    .multiply(100000)
+    .toInt();
+  var latGrid = lonLat
+    .select('latitude')
+    .multiply(100000)
+    .toInt();
+  return lonGrid
+    .multiply(latGrid)
+    .reduceToVectors({
+      geometry: geometry.buffer(100, 1000), //Buffer to expand grid and include borders
+      scale: scale,
+      geometryType: 'polygon',
+    });
+}
+// Create grid and remove cells outside AOI
+var Scale = 5000; // Set range in m to create spatial blocks
+var grid = makeGrid(AOI, Scale);
+var Grid = watermask.reduceRegions({collection: grid, reducer: ee.Reducer.mean()}).filter(ee.Filter.neq('mean',null));
+right.addLayer(Grid, {},'Grid for spatail block cross validation', 0);
+
+
+
+//////////////////////////////////////
+// Section 5 - Fitting SDM models
+//////////////////////////////////////
 
 // Define function to generate a vector of random numbers between 1 and 1000
 function runif(length) {
@@ -1368,70 +1443,65 @@ function runif(length) {
     });
 }
 
-// Define functions to estimate ROC-AUC and calculate the threshold that maximizes sensitivity and specificity.
-function getROC(img,TP){
-  var Pr_Prob_Vals = img.sampleRegions({collection: TP, properties: ['PresAbs'], scale: GrainSize, tileScale: 16});
-  var seq = ee.List.sequence({start: 0, end: 1, count: 20});
-  return ee.FeatureCollection(seq.map(function(cutoff) {
-  var Pres = Pr_Prob_Vals.filterMetadata('PresAbs','equals',1);
-  // true-positive rate, sensitivity  
-  var TPR = ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size()).divide(Pres.size());
-  var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
-  // true-negative rate, specificity  
-  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
-  // false-possitive rate
-  var FPR = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size()).divide(Abs.size());
-  var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, TNR:TNR, FPR:FPR, SUMSS:SUMSS, dist:TPR.subtract(1).pow(2).add(TNR.subtract(1).pow(2)).sqrt()});
-  }));
-}
-
-function getAUC(roc){
-  var X = ee.Array(roc.aggregate_array('FPR'));
-  var Y = ee.Array(roc.aggregate_array('TPR')); 
-  var X1 = X.slice(0,1).subtract(X.slice(0,0,-1));
-  var Y1 = Y.slice(0,1).add(Y.slice(0,0,-1));
-  return X1.multiply(Y1).multiply(0.5).reduce('sum',[0]).abs().toList().get(0);
-}
-
-function getThreshold(roc){
-  return roc.sort({property:'SUMSS',ascending:false}).first().get("cutoff")
-}
-
-
 // Define SDM function
+// Activate the desired classifier, Random Forest or Gradient Boosting. 
+// Note that other algorithms are available in GEE. See ee.Classifiers on the documentation for more information.
+
 function SDM(x) {
     var Seed = ee.Number(x);
-    var AbsPoints = ee.FeatureCollection(Data).filter(ee.Filter.eq('PresAbs',0)); //Filter all absence points
-    var AbsPoints2 = AbsPoints.randomColumn({seed:Seed});
-    var TrAbsPoints = AbsPoints2.filter(ee.Filter.lt('random', split));  // Filter points with 'random' property < split percentage
-    var TeAbsPoints = AbsPoints2.filter(ee.Filter.gte('random', split));  // Filter points with 'random' property >= split percentage
+    
+    // Randomly split blocks for training and validation
+    var GRID = ee.FeatureCollection(Grid).randomColumn({seed:Seed}).sort('random');
+    var TrainingGrid = GRID.filter(ee.Filter.lt('random', split));  // Filter points with 'random' property < split percentage
+    var TestingGrid = GRID.filter(ee.Filter.gte('random', split));  // Filter points with 'random' property >= split percentage
+
     // Presence
     var PresencePoints = ee.FeatureCollection(Data).filter(ee.Filter.eq('PresAbs',1)); //Filter all presence points
-    var PresencePoints = PresencePoints.randomColumn({seed:Seed});
-    var TrPresencePoints = PresencePoints.filter(ee.Filter.lt('random', split));  // Filter points with 'random' property < split percentage
-    var TePresencePoints = PresencePoints.filter(ee.Filter.gte('random', split));  // Filter points with 'random' property >= split percentage
+    var TrPresencePoints = PresencePoints.filter(ee.Filter.bounds(TrainingGrid));  // Filter points with 'random' property < split percentage
+    var TePresencePoints = PresencePoints.filter(ee.Filter.bounds(TestingGrid));  // Filter points with 'random' property >= split percentage
+
+    //Absence   
+    var AbsPoints = ee.FeatureCollection(Data).filter(ee.Filter.eq('PresAbs',0)); //Filter all absence points
+    var TrAbsencePoints = AbsPoints.filter(ee.Filter.bounds(TrainingGrid));  // Filter points with 'random' property < split percentage
+    var TeAbsencePoints = AbsPoints.filter(ee.Filter.bounds(TestingGrid));  // Filter points with 'random' property >= split percentage
 
     // Merge points
-    var trainingPartition = TrPresencePoints.merge(TrAbsPoints);
-    var testingPartition = TePresencePoints.merge(TeAbsPoints);
+    var trainingPartition = TrPresencePoints.merge(TrAbsencePoints);
+    var testingPartition = TePresencePoints.merge(TeAbsencePoints);
     
     // Extract local covariate values from multiband predictor image at training points
     var trainPixelVals = predictors.sampleRegions({collection: trainingPartition, properties: ['PresAbs'], scale: GrainSize, tileScale: 16});
 
-    // Classify using Random Forest
-    var rfClassifier = ee.Classifier.smileRandomForest(500).setOutputMode('PROBABILITY').train(trainPixelVals, 'PresAbs', bands); 
-    var rfClassified = predictors.select(bands).classify(rfClassifier);
-
-    // ROC-AUC
-    var ROCrf = getROC(rfClassified, testingPartition);
-    var AUCrf = getAUC(ROCrf);
-    var thresholdrf = getThreshold(ROCrf);
+    // Classify using Random Forest Probability
+    var Classifier = ee.Classifier.smileRandomForest({
+       numberOfTrees: 500, //The number of decision trees to create.
+       variablesPerSplit: null, //The number of variables per split. If unspecified, uses the square root of the number of variables.
+       minLeafPopulation: 10,//Only create nodes whose training set contains at least this many points. Integer, default: 1
+       bagFraction: 0.5,//The fraction of input to bag per tree. Default: 0.5.
+       maxNodes: null,//The maximum number of leaf nodes in each tree. If unspecified, defaults to no limit.
+       seed: Seed//The randomization seed.
+      });
     
-    // Variable importance
-    var variable_importance = ee.Feature(null, ee.Dictionary(rfClassifier.explain()).get('importance'));
+    // Classify using a Boosting Regression Tree classifier Probability
+    // var ClassifierPr = ee.Classifier.smileGradientTreeBoost({
+    //   numberOfTrees:500, //The number of decision trees to create.
+    //   shrinkage: 0.005, //The shrinkage parameter in (0, 1) controls the learning rate of procedure. Default: 0.005
+    //   samplingRate: 0.7, //The sampling rate for stochastic tree boosting. Default 0.07
+    //   maxNodes: null, //The maximum number of leaf nodes in each tree. If unspecified, defaults to no limit.
+    //   loss: "LeastAbsoluteDeviation", //Loss function for regression. One of: LeastSquares, LeastAbsoluteDeviation, Huber.
+    //   seed:Seed //The randomization seed.
+    // });
+  
+    // Presence probability 
+    var ClassifierPr = Classifier.setOutputMode('PROBABILITY').train(trainPixelVals, 'PresAbs', bands); 
+    var ClassifiedImgPr = predictors.select(bands).classify(ClassifierPr);
     
-    return ee.List([rfClassified, AUCrf, thresholdrf, variable_importance, trainingPartition, testingPartition]);
+    // Binary
+    var ClassifierBin = Classifier.setOutputMode('CLASSIFICATION').train(trainPixelVals, 'PresAbs', bands); 
+    var ClassifiedImgBin = predictors.select(bands).classify(ClassifierBin);
+   
+    return ee.List([ClassifiedImgPr, ClassifiedImgBin, trainingPartition, testingPartition]);
+  
 }
 
 
@@ -1443,144 +1513,250 @@ var numiter = 10;
 
 // Fit SDM 
 // Create random seeds
-var RanSeeds = runif(numiter)
-var results = RanSeeds.map(SDM);
-
-///////////////////////////////////
-// Section 5 - Extracting results
-///////////////////////////////////
-
+var RanSeeds = runif(numiter);
+var results = ee.List(RanSeeds).map(SDM);
 // Extract results from list
-var results = ee.List(results).flatten();
-//print(results) //Activate this line to visualize all elements
+var results = results.flatten();
+//print(results); //Activate this line to visualize all elements
 
+////////////////////////////////////////////////////////////////////
+// Section 6 - Extracting and displaying model prediction results
+////////////////////////////////////////////////////////////////////
+
+// Habitat suitability
+
+// Set visualization parameters
+var visParams = {
+  min: 0,
+  max: 0.8,
+  palette: ["#440154FF","#482677FF","#404788FF","#33638DFF","#287D8EFF",
+  "#1F968BFF","#29AF7FFF","#55C667FF","#95D840FF","#DCE319FF"],
+};
 
 // Extract all model predictions
-var imagesrf = ee.List.sequence(0,ee.Number(numiter).multiply(6).subtract(1),6).map(function(x){
+var images = ee.List.sequence(0,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
   return results.get(x)});
 
 // You can add all the individual model predictions to the map. The number of layers to add will depend on how many iterations you selected.
 
-// Map.addLayer(ee.Image(imagesMaxEnt.get(0)), {
-//   palette: ['white','tan', 'yellow', 'green'], 
-//   min: 0, 
-//   max: 1 
-// }, 'MaxEnt-Run1');
+// left.addLayer(ee.Image(images.get(0)), visParams, 'Run1');
+// left.addLayer(ee.Image(image.get(1)), visParams, 'Run2');
 
-// Map.addLayer(ee.Image(imagesrf.get(0)), {
-//   palette: ['white','tan', 'yellow', 'green'], 
-//   min: 0, 
-//   max: 1 
-// }, 'RF-Run1');
+// Calculate mean of all indivudual model runs
+var ModelAverage = ee.ImageCollection.fromImages(images).mean();
 
-//////////////////////////
-// Extract AUC-ROC results
-var AUCs = ee.List.sequence(1,ee.Number(numiter).multiply(6).subtract(1),6)
-                .map(function ExtractAUC(x){
-   return results.get(x)});
+// Add final habitat suitability layer and presence locations to the map
+left.addLayer(ModelAverage, visParams, 'Habitat Suitability');
+left.addLayer(Data, {color:'red'}, 'Presence', 1);
 
-//Print AUC-ROC results of each individual models 
-print('AUC-ROC', AUCs);
+// Create legend for habitat suitability map.
+var legend = ui.Panel({style: {position: 'bottom-left', padding: '8px 15px'}});
 
-// Print AUC-ROC mean and SD among models
-print('Mean AUC-ROC', AUCs.reduce(ee.Reducer.mean()));
-print('SD AUC-ROC', AUCs.reduce(ee.Reducer.stdDev()));
- 
-//////////////////////////
-// Extract AUC-ROC results
-var Thresholds = ee.List.sequence(2,ee.Number(numiter).multiply(6).subtract(1),6)
-                 .map(function ExtractThresholds(x){
-   return results.get(x)});
-//print('Thresholds:', Thresholds)
+legend.add(ui.Label({
+  value: "Habitat suitability",
+  style: {fontWeight: 'bold', fontSize: '18px', margin: '0 0 4px 0', padding: '0px'}
+}));
 
-////////////////////////////////////////
-// Plot averaged variable importance
+var colors = ["#DCE319FF","#287D8EFF","#440154FF"];
+var names = ['High', 'Medium','Low'];
+var entry;
+for (var x = 0; x<3; x++){
+  entry = [
+    ui.Label({style:{color:colors[x],margin: '0 0 4px 0'}, value:'██'}),
+    ui.Label({value: names[x],style: {margin: '0 0 4px 4px'}})
+  ];
+  legend.add(ui.Panel(entry, ui.Panel.Layout.Flow('horizontal')));
+}
 
-var Var_Imp = ee.List.sequence(3,ee.Number(numiter).multiply(6).subtract(1),6).map(function(x){
+legend.add(ui.Panel(
+  [ui.Label({value: "Presence locations",style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 4px 0'}}),
+   ui.Label({style:{color:"red",margin: '0 0 0 4px'}, value:'◉'})],
+  ui.Panel.Layout.Flow('horizontal')));
+
+left.add(legend);
+
+
+// Distribution map
+
+// Extract all model predictions
+var images2 = ee.List.sequence(1,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
   return results.get(x)});
-var Var_Imp = ee.FeatureCollection(Var_Imp);
 
-var Variable_Imp = Var_Imp.reduceColumns({
-  reducer: ee.Reducer.mean().repeat(ee.List(bands).length()),
-  selectors: bands
-});
+// Calculate mean of all indivudual model runs
+var DistributionMap = ee.ImageCollection.fromImages(images2).mode();
 
-//print('Variable importance', Variable_Imp);
+// Add final distribution map and presence locations to the map
+right.addLayer(DistributionMap, 
+  {palette: ["white", "green"], min: 0, max: 1}, 
+  'Potential distribution');
+right.addLayer(Data, {color:'red'}, 'Presence', 1);
 
-// Chart of Variable Importance of RF Classifier
-print(ui.Chart.array.values(ee.Array(Variable_Imp.get('mean')), 0, bands)
-      .setChartType('ColumnChart')
-      .setOptions({
-        title: 'Random Forest Variable Importance',
-        legend: {position: 'none'},
-        hAxis: {title: 'Bands'},
-        vAxis: {title: 'Importance'}
-      }));
+// Create legend for distribution map
+var legend2 = ui.Panel({style: {position: 'bottom-left',padding: '8px 15px'}});
+legend2.add(ui.Label({
+  value: "Potential distribution map",
+  style: {fontWeight: 'bold',fontSize: '18px',margin: '0 0 4px 0',padding: '0px'}
+}));
 
-//////////////////////////////////
-// Section 6 - Model Ensembling
-//////////////////////////////////
-var images = imagesrf
-var PreEnsemble = ee.List.sequence(0, ee.Number(numiter).subtract(1)).map(function(i){
-  return ee.Image(images.get(i)).multiply(ee.Number(AUCs.get(i)))});
-var Ensemble = ee.ImageCollection.fromImages(PreEnsemble).sum().divide(ee.Number(AUCs.reduce(ee.Reducer.sum())));
-// print(Ensemble);
+var colors2 = ["green","white"];
+var names2 = ['Presence', 'Absence'];
+var entry2;
+for (var x = 0; x<2; x++){
+  entry2 = [
+    ui.Label({style:{color:colors2[x],margin: '0 0 4px 0'}, value:'██'}),
+    ui.Label({value: names2[x],style: {margin: '0 0 4px 4px'}})
+  ];
+  legend2.add(ui.Panel(entry2, ui.Panel.Layout.Flow('horizontal')));
+}
 
-// Add final habitat suitability layer to the map
-Map.addLayer(ee.Image(Ensemble), {
-  palette: ['white','tan', 'yellow', 'green'], 
-  min: 0, 
-  max: 0.8 
-}, 'Habitat Suitability - Ensemble Model');
+legend2.add(ui.Panel(
+  [ui.Label({value: "Presence locations",style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 4px 0'}}),
+   ui.Label({style:{color:"red",margin: '0 0 4px 4px'}, value:'◉'})],
+  ui.Panel.Layout.Flow('horizontal')));
 
-var binarymap = ee.Image(Ensemble).gt(ee.Number(Thresholds.reduce(ee.Reducer.mean())));
-// Add final habitat suitability layer to the map
-Map.addLayer(binarymap, {
-  palette: ['white', 'green'], 
-  min: 0, 
-  max: 1
-}, 'Distribution Map - Ensemble Model');
+right.add(legend2);
+
+/////////////////////////////////////////
+// Section 7 - Accuracy assessment
+/////////////////////////////////////////
+
+// Extract testing/validation datasets
+var TestingDatasets = ee.List.sequence(3,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
+                      return results.get(x)});
+
+// Double check that you have a satisfactory number of points for model validation
+print('Number of presence and absence points for model validation', ee.List.sequence(0,ee.Number(numiter).subtract(1),1)
+.map(function(x){
+  return ee.List([ee.FeatureCollection(TestingDatasets.get(x)).filter(ee.Filter.eq('PresAbs',1)).size(),
+         ee.FeatureCollection(TestingDatasets.get(x)).filter(ee.Filter.eq('PresAbs',0)).size()]);
+})
+);
+
+// Define functions to estimate, sensitivity, specificity and precision.
+function getAcc(img,TP){
+  var Pr_Prob_Vals = img.sampleRegions({collection: TP, properties: ['PresAbs'], scale: GrainSize, tileScale: 16});
+  var seq = ee.List.sequence({start: 0, end: 1, count: 25});
+  return ee.FeatureCollection(seq.map(function(cutoff) {
+  var Pres = Pr_Prob_Vals.filterMetadata('PresAbs','equals',1);
+  // true-positive and true-positive rate, sensitivity  
+  var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
+  var TPR = TP.divide(Pres.size());
+  var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
+  // true-negative rate, specificity  
+  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-possitive and false-possitive rate
+  var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
+  var FPR = FP.divide(Abs.size());
+  // precision
+  var Precision = TP.divide(TP.add(FP));
+  // sum of sensitivity and specificity
+  var SUMSS = TPR.add(TNR);
+  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  }));
+}
+
+// Calculate AUC of the Receiver Operator Characteristic
+function getAUCROC(x){
+  var X = ee.Array(x.aggregate_array('FPR'));
+  var Y = ee.Array(x.aggregate_array('TPR')); 
+  var X1 = X.slice(0,1).subtract(X.slice(0,0,-1));
+  var Y1 = Y.slice(0,1).add(Y.slice(0,0,-1));
+  return X1.multiply(Y1).multiply(0.5).reduce('sum',[0]).abs().toList().get(0);
+}
+
+function AUCROCaccuracy(x){
+  var HSM = ee.Image(images.get(x));
+  var TData = ee.FeatureCollection(TestingDatasets.get(x));
+  var Acc = getAcc(HSM, TData);
+  return getAUCROC(Acc);
+}
 
 
-/////////////////////////////////
-// Section 7 - Export outputs
-/////////////////////////////////
+var AUCROCs = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(AUCROCaccuracy);
+print('AUC-ROC:', AUCROCs);
+print('Mean AUC-ROC', AUCROCs.reduce(ee.Reducer.mean()));
+
+/////////////////////////////////////////////////////////////////////////////////
+// Section 8 - Create a custom binary distribution map based on best threshold
+/////////////////////////////////////////////////////////////////////////////////
+
+// Calculating the potential distribution map based on the threshold 
+// that maximizes the sum of sensitivity and specificity is high-intensive and
+// for large number of iterations may need to be processed using a batch mode.
+// In a batch mode, the final image needs to exported to Google Drive and opened in 
+// another software for visualization.
+
+// Function to extract theshold values
+function getThreshold(x){
+  var HSM = ee.Image(images.get(x));
+  var TData = ee.FeatureCollection(TestingDatasets.get(x));
+  var Acc = getAcc(HSM, TData);
+  return Acc.sort({property:'SUMSS',ascending:false}).first().get("cutoff");
+}
+
+// Extract threshold values
+var Thresholds = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(getThreshold);
+var MT = ee.Number(Thresholds.reduce(ee.Reducer.mean()));
+print('Mean threshold:', MT);
+
+// Calculate mean of all indivudual model runs
+var DistributionMap2 = ModelAverage.gte(MT).unmask(-9999);
 
 // Export final model to drive
-// Export.image.toDrive({
-//   image: binarymap,
-//   description: 'Distribution',
-//   scale: GrainSize,
-//   maxPixels: 2000000000,
-//   region: AOI
-// });
+Export.image.toDrive({
+  image: DistributionMap2,
+  description: 'filename',
+  scale: GrainSize,
+  maxPixels: 1e10,
+  region: AOI
+});
 
-// Export.image.toDrive({
-//   image: Ensemble,
-//   description: 'EnsembleModel',
-//   scale: GrainSize,
-//   maxPixels: 2000000000,
-//   region: AOI
-// });
 
-// Export training and validation datasets
-var TrainingDatasets = ee.List.sequence(5,ee.Number(numiter).multiply(9).subtract(1),9).map(function(x){
+///////////////////////////////////////
+// Section 9 - Export outputs
+///////////////////////////////////////
+
+// Export final model to drive
+/*
+Export.image.toDrive({
+  image: DistributionMap, //Object to export
+  description: 'PotentialDistribution', //Name of the file
+  scale: GrainSize, //Spatial resolution of the exported raster
+  maxPixels: 1e10,
+  region: AOI //Area of interest
+});
+
+Export.image.toDrive({
+  image: ModelAverage, //Object to export
+  description: 'HSI', //Name of the file
+  scale: GrainSize, //Spatial resolution of the exported raster
+  maxPixels: 1e10,
+  region: AOI //Area of interest
+});
+
+// Export training and validation data sets
+
+// Extract training datasets
+var TrainingDatasets = ee.List.sequence(1,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
   return results.get(x)});
-//print(TrainingDatasets)
 
-var TestingDatasets = ee.List.sequence(6,ee.Number(numiter).multiply(9).subtract(1),9).map(function(x){
-  return results.get(x)});
-//print(TestingDatasets)
-
-// If you are interested in exporting any of the training or testing data sets used for modeling,
+// If you are interested in exporting any of the training or testing data sets used for modelling,
 // you need to extract the feature collections from the list and export them.
-// Here an example to export the validation data set from the first run:
+// Here an example to export the trainign and validation data sets from the first iteration. 
+// For other iterations you need to change the number in the get function. In JavaScript the first element of the list is 0.
 
-// Export.table.toDrive({
-//   collectio : TestingDatasets.get(0),
-//   description: 'TestingDataRun1',
-//   fileFormat: 'CSV',
-// });
+Export.table.toDrive({
+  collectio : TrainingDatasets.get(0),
+  description: 'TestingDataRun1',
+  fileFormat: 'CSV',
+});
+
+Export.table.toDrive({
+  collectio : TestingDatasets.get(0),
+  description: 'TestingDataRun1',
+  fileFormat: 'CSV',
+});
+*/
 ```
 
 
