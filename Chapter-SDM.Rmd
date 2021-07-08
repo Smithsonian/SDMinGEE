@@ -1054,16 +1054,16 @@ function getAcc(img,TP){
   // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
-  // presicion
-  var Presicion = TP.divide(TP.add(FP));
-  return ee.Feature(null,{TPR:TPR, FPR:FPR, Presicion:Presicion});
+  // precision
+  var Precision = TP.divide(TP.add(FP));
+  return ee.Feature(null,{TPR:TPR, FPR:FPR, Precision:Precision});
   }));
 }
 
-// Calculate AUC of Presicion Recall Curve
+// Calculate AUC of Precision Recall Curve
 function getAUCPR(x){
   var X = ee.Array(x.aggregate_array('TPR'));
-  var Y = ee.Array(x.aggregate_array('Presicion')); 
+  var Y = ee.Array(x.aggregate_array('Precision')); 
   var X1 = X.slice(0,1).subtract(X.slice(0,0,-1));
   var Y1 = Y.slice(0,1).add(Y.slice(0,0,-1));
   return X1.multiply(Y1).multiply(0.5).reduce('sum',[0]).abs().toList().get(0);
