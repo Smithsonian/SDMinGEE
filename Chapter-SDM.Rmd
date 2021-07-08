@@ -194,7 +194,7 @@ ui.Map.Linker([left, right], 'change-bounds');
 
 > In JavaScript you can activate or inactivate lines of code by using //. JavaScript will omit all the text that comes after the //. Commenting out code that prints objects or add elements to the map is a good practice to keep the code clean. Sometimes it can help reducing the chance of reaching memory limits as we reduce the number of processes being called.
 
-![Figure S4. Presence data for Bradypus variegatus. Data was obtained from GBIF and cleaned manually using QGIS software.](./Figures/Fig4.png)
+![Figure S4. Presence data for Bradypus variegatus. Data was obtained from GBIF.](./Figures/Fig4.png)
 
 ## Defining area of interest
 
@@ -320,7 +320,7 @@ var AreaForPA = mask.mask().clip(AreaForPA).updateMask(watermask).clip(AOI);
 right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
 ```
 
-![Figure S7. Example of buffer zone used to create random pseudoabsences. The enlarged box shows how pixels with presence locations are masked to avoid creating pseudoabsences in the same location of presences.](./Figures/Fig7.png)
+![Figure S7. Example of buffer zone used to create random pseudo-absences. The enlarged box shows how pixels with presence locations are masked to avoid creating pseudoabsences in the same location of presences.](./Figures/Fig7.png)
 
 We implemented a block repeated split-sample cross-validation technique to randomly partition data for model training and validation (Roberts et al., 2017; Valavi, Elith, Lahoz-Monfort, & Guillera-Arroita, 2019). We will then run multiple model iterations with random block splits to create training and validation data sets.
 
@@ -828,7 +828,7 @@ Map.addLayer(outline, {palette: 'FF0000'}, "Study Area");
 Map.centerObject(AOI, 6); //Number indicates the zoom level
 ```
 
-![Figure 10. Defined area of interest to study *Cebus capucinus* suitable habitat change.](./Figures/Fig11.png)
+![Figure S11. Defined area of interest to study *Cebus capucinus* habitat suitability change.](./Figures/Fig11.png)
 
 We will use data between 2003 and 2018 for model fit, removing all records from the same year within the same 250 m pixel. To do so, we need to run the `removeduplicate()` function for each year at the specified grain size and then merge all years back together.
 
@@ -952,7 +952,7 @@ print('Presence data size:', DataFinal.size());
 Map.addLayer(DataFinal, {color:'red'}, 'Presence', 1)  //Add points to the map
 ```
 
-![Figure 11.*Cebus capucinus* presence locations.](./Figures/Fig12.png)
+![Figure S12. *Cebus capucinus* presence locations.](./Figures/Fig12.png)
 
 After all this process, we end with 330 occurrence records.
 
@@ -1119,7 +1119,7 @@ print('AUC of the precision-recall:', AUCPRs);
 print('Mean AUC of the precision-recall', AUCPRs.reduce(ee.Reducer.mean()));
 ```
 
-![Figure 12.2019 presence data used for model validation.](./Figures/Fig13.png)
+![Figure S13. 2019 presence data used for model validation.](./Figures/Fig13.png)
 
 ---
 
@@ -1191,9 +1191,9 @@ for (var x = 0; x<3; x++){
 }
 ```
 
-![Figure 13.Predicted *Cebus capucinus* habitat suitability for 2000.](./Figures/Fig14.png)
+![Figure S14. Predicted *Cebus capucinus* habitat suitability for 2000.](./Figures/Fig14.png)
 
-![Figure 15.Predicted *Cebus capucinus* habitat suitability for 2019.](./Figures/Fig15.png)
+![Figure S15. Predicted *Cebus capucinus* habitat suitability for 2019.](./Figures/Fig15.png)
 
 To assess habitat suitability change across time, we fit a pixel based linear regression. We applied the `formaTrend()` function to the image collection of model predictions. This function fits a pixel-based linear regression on the 20-habitat suitability raster to identify areas where habitat suitability increased or decreased across the 20 years. The product is an image with two bands or interest, the slope of the linear regression and a t-test statistic on the significance of the slope. We create a mask using the t-test statistic to masked out from the temporal trend image (the slope of each pixel linear regression) all pixels with non-significant trends. 
 
@@ -1243,7 +1243,7 @@ Map.add(legend);
 ```
 
 
-![Figure 16.Regression slope showing a grade from positive (green), to neutral (yellow), to negative (red) trends in habitat suitability change between 2000 and 2019 for *Cebus capucinus*.](./Figures/Fig16.png)
+![Figure S16. Regression slope showing a grade from positive (blue) to negative (red) trends in habitat suitability change between 2000 and 2019 for *Cebus capucinus*. Only pixels with significative trends are shown.](./Figures/Fig16.png)
 
 It is also possible to create a gif animation showing the change of habitat suitability across years.
 
@@ -1266,7 +1266,7 @@ var gifParams = {
 print(rgbVis.getVideoThumbURL(gifParams));
 ```
 
-![Figure 17.*Cebus capucinus* habitat suitability change across years.](./Figures/Fig17.gif)
+![Figure S17. *Cebus capucinus* habitat suitability change across years.](./Figures/Fig17.gif)
 
 As before, we can export results into Google Drive.
 
