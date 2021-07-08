@@ -1,19 +1,13 @@
 ---
-title: Supplemental Materials - Apendix 1 - Implementation of ensemble species distribution
+title: Supplemental Materials - Apendix 1 - Implementation of species distribution
   models in Google Earth Engine
-author: "Ramiro D. Crego ^1,2^, Jared A. Stabach ^1^ and Grand Connette ^1,2^"
-date: "`r Sys.Date()`"
+author: ""
+date: ""
 output:
   word_document: default
   html_document: default
   pdf_document: defaul
 ---
-
-1. Smithsonian National Zoo and Conservation Biology Institute, Conservation Ecology Center, 1500 Remount Rd, Front Royal, VA 22630, USA.
-
-2. Working Land and Seascapes, Conservation Commons, Smithsonian Institution, Washington, DC 20013, USA.
-
-***
 
 This is a guide for modeling species distributions and habitat suitability in Google Earth Engine. This guide is intended to explain the details of the Earth Engine code.
 
@@ -33,7 +27,7 @@ Data sets need to be uploaded as assets in Google Earth Engine. The easiest way 
 
 Below is an example to upload the *Bradypus variegatus* data set from a `csv` file. Prepare a `csv` file with coordinates in latitude and longitude (EPSG:4326). To include a column with date use format Year-Month-Day (e.g., 2000-01-30). Date will be formatted automatically.
 
-![Figure S1. Uploading assets to Google Earth Engine. 1) Click new and then CSV. 2) Click upload. 3)Select the file from your computer. 4) Provide name for asset and the names of the columns containing coordinates in degrees.](Fig1.jpg)
+![Figure S1. Uploading assets to Google Earth Engine. 1) Click new and then CSV. 2) Click upload. 3)Select the file from your computer. 4) Provide name for asset and the names of the columns containing coordinates in degrees.](./Figures/Fig1.jpg)
 
 ## Loading and cleaning your species data
 
@@ -68,7 +62,7 @@ var Data = RemoveDuplicates(Data);
 
 The following figure exemplifies how points are rarefied at a 1 km grain size.
 
-![Figure S2. Example on presence point rarification. A) Original dataset; B) Final dataset with only one point per pixel.](Fig2.png)
+![Figure S2. Example on presence point rarification. A) Original dataset; B) Final dataset with only one point per pixel.](./Figures/Fig2.png)
 
 
 You can evaluate the number of points before and after removing duplicates.
@@ -116,13 +110,13 @@ Map.addLayer(AOI, {}, 'AOI', 1); # The number 1 indicates the zoom level. Higher
 
 ## Selecting predictor variables
 
-One of the main advantages of implementing SDMs in Google Earth Engine is to make use of the extence available predictor variables. This includes not only the bioclimatic variables from Hijmans et al. (2005), but elevation data and derivatives (slope, aspect, hillside, etc.), diverse vegetation indexes, human modified indexes, night light images, water bodies, hourly climatic data, land cover classifications, roads or other infrastructure and even the raw pixel values of satellite data. Depending on your area of interest, certain regions have more data availability. GEE gives the opportunity to directly include into the analysis processed satellite imagery, such as a land cover classification that you have previously conducted for your area of interest.
+One of the main advantages of implementing SDMs in Google Earth Engine is to make use of the extensive available predictor variables. This includes not only the bioclimatic variables from Hijmans et al. (2005), but elevation data and derivatives (slope, aspect, hillside, etc.), diverse vegetation indexes, human modified indexes, night light images, water bodies, hourly climatic data, land cover classifications, roads or other infrastructure and even the raw pixel values of satellite data. Depending on your area of interest, certain regions have more data availability. GEE gives the opportunity to directly include into the analysis processed satellite imagery, such as a land cover classification that you have previously conducted for your area of interest.
 
 Selecting predictor variables is a step in which the researcher needs to have its input on the knowledge of the species, the variables that may affect its distribution, etc.
 
-To find spatial datasets, you can use the search bar. All information related to each spatial dataset is available by clicking on the name of the product. The code necesary to import the dataset is available as shown in the following figure. 
+To find spatial data sets, you can use the search bar. All information related to each spatial data set is available by clicking on the name of the product. The code necessary to import the dataset is available as shown in the following figure. 
 
-![Figure S3. SRTM Digital Elevation Data description with code to import the dataset](Fig3.JPG)
+![Figure S3. SRTM Digital Elevation Data description with code to import the dataset](./Figures/Fig3.JPG)
 
 ```{js, eval=F}
 // Example of code to import the SRTM Digital Elevation Data 30m
@@ -184,7 +178,7 @@ ui.Map.Linker([left, right], 'change-bounds');
 
 > In JavaScript you can activate or inactivate lines of code by using //. JavaScript will omit all the text that comes after the //. Commenting out code that prints objects or add elements to the map is a good practice to keep the code clean. Sometimes it can help reducing the chance of reaching memory limits as we reduce the number of processes being called.
 
-![Figure S4. Presence data for Bradypus variegatus. Data was obtained from GBIF and cleaned manually using QGIS software.](Fig4.png)
+![Figure S4. Presence data for Bradypus variegatus. Data was obtained from GBIF and cleaned manually using QGIS software.](./Figures/Fig4.png)
 
 ## Defining area of interest
 
@@ -211,7 +205,7 @@ left.centerObject(AOI, 4); //Number indicates the zoom level
 
 > Note in the code we are using right and left instead of the default Map statement, given that we divided the interactive map in two elements, right and left.
 
-![Figure S5. This figure shows the area of interest defined as a 100 km buffer around the bonding box containing all presence locations.](Fig5.png)
+![Figure S5. This figure shows the area of interest defined as a 100 km buffer around the bonding box containing all presence locations.](./Figures/Fig5.png)
 
 ## Loading predictor variables
 
@@ -252,14 +246,14 @@ right.addLayer(predictors, {bands:['bio12'], min: 0, max: 4000, palette:'white,b
 right.addLayer(predictors, {bands:['Percent_Tree_Cover'], min: 1, max: 100, palette:'white,yellow,green'}, 'Percent_Tree_Cover', 0); 
 ```
 
-![Figure S6. Example of predictor variables. A) Elevation; B) Temperature seasonality; C) Annual precipitation; D) Median percentage of tree cover between 2003 and 2020.](Fig6.png)
+![Figure S6. Example of predictor variables. A) Elevation; B) Temperature seasonality; C) Annual precipitation; D) Median percentage of tree cover between 2003 and 2020.](./Figures/Fig6.png)
 
 It is important to make sure that there is no significant correlation among predictor variables that can cause collinearity effects. We account for this by estimating the Spearman correlation among predictor variable values at 5000 random locations. Highly correlated predictor variables should not be included in the same model.
 
 ```{js, eval=F}
 // Estimate correlation among predictor variables
 
-// Extract local covariate values from multiband predictor image at training points
+// Extract local covariate values from multiband predictor image at 5000 random points
 var DataCor = predictors.sample({scale: GrainSize, numPixels: 5000, geometries: true}); //Generate 5000 random points
 var PixelVals = predictors.sampleRegions({collection: DataCor, scale: GrainSize, tileScale: 16}); //Extract covariate values
 
@@ -277,19 +271,19 @@ var CorrAll = predictors.bandNames().map(function(i){
 print('Variables correlation matrix',CorrAll);
 ```
 
-> This is a function that requieres high memory to GEE as it is working with a large feature collection. Once you have run the correlation and defined the set of covariables to use, it is recommended to comment out the print function so the correlatin matrix is not printed out to the console. 
+> This is a function that requires high memory to GEE as it is working with a large feature collection. Once you have run the correlation and defined the set of covariables to use, it is recommended to comment out the print function so the correlation matrix is not printed out to the console. 
 
-## Creating pseudoabsences
+## Creating pseudo-absences
 
 In this example, we use presence only data, the most common methodology when using data from online databases such as, GBIF. We will generate pseudo-absences to fit the model. But first, we need to define the area in which random pseudo-absences can be generated. It is recommended to limit pseudo-absences within a buffer around each presence location in order to limit pseudo-absences to areas potentially accessible to the species (Araújo et al., 2019) and to account for the potential geographical or environmental sampling bias of presence records by creating pseudo-absences with a similar sampling bias (Phillips et al., 2009).
 
-The `buffer()` function determines the area available for generating pseudo-absences, assuming that these areas have the same sampling bias than the records and represent areas where animals can disperse. 
+The `buffer()` function determines the area available for generating pseudo-absences, assuming that these areas have the same sampling bias than the records and represent areas where animals can disperse. The `buffer()` function has two arguments, the distance in meters for the buffer and the maximum amount of error tolerated when approximating the buffer circle. Larger maximum errors improve computing efficiency.
 
 For our example We set a wide buffer of 500 km given that *Bradypus variegatus* present a wide distribution across South America and we assumed people from across the continent can report presence records.
 
 ```{js, eval=F}
 /////////////////////////////////////////////////////////////////////////////
-// Section 4 - Defining blocks blocks to fold randomly for cross validation
+// Section 4 - Defining blocks to fold randomly for cross validation
 /////////////////////////////////////////////////////////////////////////////
 
 // Make an image out of the presence locations to mask from the area to generate pseudo-absences.
@@ -310,7 +304,7 @@ var AreaForPA = mask.mask().clip(AreaForPA).updateMask(watermask).clip(AOI);
 right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
 ```
 
-![Figure S7. Example of buffer zone used to create random pseudoabsences. The enlarged box shows how pixels with presence locations are masked to avoid creating pseudoabsences in the same location of presences.](Fig7.png)
+![Figure S7. Example of buffer zone used to create random pseudoabsences. The enlarged box shows how pixels with presence locations are masked to avoid creating pseudoabsences in the same location of presences.](./Figures/Fig7.png)
 
 We implemented a block repeated split-sample cross-validation technique to randomly partition data for model training and validation (Roberts et al., 2017; Valavi, Elith, Lahoz-Monfort, & Guillera-Arroita, 2019). We will then run multiple model iterations with random block splits to create training and validation data sets.
 
@@ -347,14 +341,14 @@ var Grid = AreaForPA.reduceRegions({collection: grid, reducer: ee.Reducer.mean()
 right.addLayer(Grid, {},'Grid for spatail block cross validation', 0);
 ```
 
-![Figure S8. Example of two spatial blocks created for cross validation. In the two examples shown here, blocks of 500 x 500 km have been randomly splet in 70% for training data (blue) and 30% for validation data (red).](Fig8.png)
+![Figure S8. Example of two spatial blocks created for cross validation. In the two examples shown here, blocks of 500 x 500 km have been randomly split in 70% for training data (blue) and 30% for validation data (red).](./Figures/Fig8.png)
 
 
 ## Model fit, model validation and model predictions
 
 We can now fit the models. There are several functions that need to be defined.
 
-The first function allows to create random seeds for randomly spliting blocks and generating pseudo-absences at each iteration. 
+The first function allows to create random seeds for randomly splitting blocks and generating pseudo-absences at each iteration. 
 
 ```{js, eval=F}
 //////////////////////////////////
@@ -374,7 +368,7 @@ We need to define a function to fit models.
 
 There are several non-parametric classifier algorithms available in GEE that can be implemented. These include, Random Forest, support vector machine, classification and regression trees, maximum entropy, and gradient boosting.
 
-We implement a 10 block repeated split-sample cross-validation technique. The number of pseudo-absences is balanced with the number of presences for the training and validation datsa sets, what is a practice recommended for machine learning classifiers (Evans et al., 2011; Barbet-Massin et al. 2012). In this case, we will use Random Forest. But note that in the `SDM` function, we also provide the code to fit gradient boosting classifiers. To change the classifier, you need to comment out the Random Forest using two forward slashes (`//`) and activate the gradient boosting classifier. 
+We implement a 10 block repeated split-sample cross-validation technique. The number of pseudo-absences is balanced with the number of presences for the training and validation data sets, what is a practice recommended for machine learning classifiers (Evans et al., 2011; Barbet-Massin et al. 2012). In this case, we will use Random Forest. But note that in the `SDM` function, we also provide the code to fit gradient boosting classifiers. To change the classifier, you need to comment out the Random Forest using two forward slashes (`//`) and activate the gradient boosting classifier. 
 
 We use the `setOutputMode()` to obtain results as `PROBABILITY` and as `CLASSIFICATION`. This allows to obtain binary outputs to quickly visualize them in the interactive map. Later we will show how to define a threshold to transform the probability output into a binary map.
 
@@ -468,7 +462,7 @@ We can now map the model function. Instead of generating random numbers, we will
 //var RanSeeds = runif(numiter)
 //var results = ee.List(RanSeeds).map(SDM)
 
-// While the runif function can be used to generate rundom seeds, we map the SDM function over random created numbers for reproducibility of results
+// While the runif function can be used to generate random seeds, we map the SDM function over random created numbers for reproducibility of results
 var results = ee.List([35,68,43,54,17,46,76,88,24,12]).map(SDM);
 
 // Extract results from list
@@ -542,7 +536,7 @@ left.add(legend);
 var images2 = ee.List.sequence(1,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
   return results.get(x)});
 
-// Calculate mean of all indivudual model runs
+// Calculate mean of all individual model runs
 var DistributionMap = ee.ImageCollection.fromImages(images2).mode();
 
 // Add final distribution map and presence locations to the map
@@ -577,7 +571,7 @@ legend2.add(ui.Panel(
 right.add(legend2);
 ```
 
-![Figure S9. Visualization of predicted habitat suitability and potential distribution of *Bradypus variegatus*.](Fig9.png)
+![Figure S9. Visualization of predicted habitat suitability and potential distribution of *Bradypus variegatus*.](./Figures/Fig9.png)
 
 > It is important to understand that GEE does a resampling on the fly for displaying maps. The resolution of the model will change with the zoom level. To set the visualization at the resolution of the analysis defined with the grain size, you need to specify the resolution of the image using the function `reproject()`.
 
@@ -614,7 +608,7 @@ function getAcc(img,TP){
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
   // true-negative rate, specificity  
   var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
-  // false-possitive and false-possitive rate
+  // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
   // precision
@@ -724,7 +718,7 @@ Export.image.toDrive({
 });
 ```
 
-![Figure S10. Potential distribution of *Bradypus variegatus* calculated using a custom threshold. The final map was exported to Google Drive and displayed using QGIS.](Fig10.png)
+![Figure S10. Potential distribution of *Bradypus variegatus* calculated using a custom threshold. The final map was exported to Google Drive and displayed using QGIS.](./Figures/Fig10.png)
 
 ## Exporting results
 
@@ -755,13 +749,13 @@ Export.image.toDrive({
 
 // Export training and validation data sets
 
-// Extract training datasets
+// Extract training data sets
 var TrainingDatasets = ee.List.sequence(1,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
   return results.get(x)});
 
-// If you are interested in exporting any of the training or testing data sets used for modelling,
+// If you are interested in exporting any of the training or testing data sets used for modeling,
 // you need to extract the feature collections from the list and export them.
-// Here an example to export the trainign and validation data sets from the first iteration. 
+// Here an example to export the training and validation data sets from the first iteration. 
 // For other iterations you need to change the number in the get function. In JavaScript the first element of the list is 0.
 
 Export.table.toDrive({
@@ -789,7 +783,7 @@ For this example we will model *Cebus capucinus* distribution in Panama and Cost
 
 As a note, some authors consider the subspecies *Cebus capucinus imitator* and  *Cebus capucinus capucinus* two distinct species which distribution split in central Panama (Mittermeier et al., 2013). In this study, we consider *Cebus capucinus* as one taxon.
 
-For this analysis we will define a study area encompassing Costa Rica and Panama countries. For replicavility, we manually define a polygon geometry.
+For this analysis we will define a study area encompassing Costa Rica and Panama countries. For replicability, we manually define a polygon geometry.
 
 ```{js, eval=F}
 ////////////////////////////////////
@@ -818,7 +812,7 @@ Map.addLayer(outline, {palette: 'FF0000'}, "Study Area");
 Map.centerObject(AOI, 6); //Number indicates the zoom level
 ```
 
-![Figure 10. Defined area of interest to study *Cebus capucinus* suitable habitat change.](Fig11.png)
+![Figure 10. Defined area of interest to study *Cebus capucinus* suitable habitat change.](./Figures/Fig11.png)
 
 We will use data between 2003 and 2018 for model fit, removing all records from the same year within the same 250 m pixel. To do so, we need to run the `removeduplicate()` function for each year at the specified grain size and then merge all years back together.
 
@@ -867,7 +861,7 @@ We will use mean annual temperature, annual precipitation (Hijmans et al. 2005),
 // Section 3 - Selecting Predictor Variables
 //////////////////////////////////////////////
 
-// Load bioclimatic dataset
+// Load bioclimatic data set
 var BIO = ee.Image("WORLDCLIM/V1/BIO");
 
 // Load elevation data 
@@ -942,7 +936,7 @@ print('Presence data size:', DataFinal.size());
 Map.addLayer(DataFinal, {color:'red'}, 'Presence', 1)  //Add points to the map
 ```
 
-![Figure 11.*Cebus capucinus* presence locations.](Fig12.png)
+![Figure 11.*Cebus capucinus* presence locations.](./Figures/Fig12.png)
 
 After all this process, we end with 330 occurrence records.
 
@@ -1022,14 +1016,14 @@ var results = results.flatten();
 
 Because model predictions will vary each year due to changes in underlying predictor variables, we withheld data from 2019 for model validation. This out-of-bag sample (2019) had a large number of occurrence records and was the last year the MODIS VCF was available in GEE. Using these data has the assumption that if the model predicts well for data in 2019, then the model likely performed well in other years and is useful for predictions. We used 125 occurrence records, and a set of 125 pseudo-absences randomly created across the study area (100 km buffer around each occurrence location) to estimate the AUC for each of the five individual model predictions using the percentage of tree cover for 2019, together with mean annual temperature, annual precipitation and elevation as the predictor variables. 
 
-We need to define the AUC-ROC functions as we did in the previous example.
+We need to define the AUC-RP functions as we did in the previous example.
 
 ```{js, eval=F}
 ////////////////////////////////////
 // Section 7 - Accuracy assessment
 ////////////////////////////////////
 
-// Define functions to estimate, sensitivity, specificity and presicion.
+// Define functions to estimate, sensitivity, specificity and precision.
 function getAcc(img,TP){
   var Pr_Prob_Vals = img.sampleRegions({collection: TP, properties: ['PresAbs'], scale: GrainSize, tileScale: 16});
   var seq = ee.List.sequence({start: 0, end: 1, count: 25});
@@ -1041,7 +1035,7 @@ function getAcc(img,TP){
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
   // true-negative rate, specificity  
   var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
-  // false-possitive and false-possitive rate
+  // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
   // presicion
@@ -1109,7 +1103,7 @@ print('AUC of the precision-recall:', AUCPRs);
 print('Mean AUC of the precision-recall', AUCPRs.reduce(ee.Reducer.mean()));
 ```
 
-![Figure 12.2019 presence data used for model validation.](Fig13.png)
+![Figure 12.2019 presence data used for model validation.](./Figures/Fig13.png)
 
 ---
 
@@ -1157,7 +1151,7 @@ var visParams = {
 
 var HSIlist = HSI.toList(20);
 
-// Add final habitat suitability layer to the map. Use the funciton get to select specific years. 0 is the first element in the list.
+// Add final habitat suitability layer to the map. Use the function get to select specific years. 0 is the first element in the list.
 Map.addLayer(ee.Image(HSIlist.get(0)), visParams, 'Habitat Suitability - 2000');
 Map.addLayer(ee.Image(HSIlist.get(19)), visParams, 'Habitat Suitability - 2019');
 
@@ -1181,9 +1175,9 @@ for (var x = 0; x<3; x++){
 }
 ```
 
-![Figure 13.Predicted *Cebus capucinus* habitat suitability for 2000.](Fig14.png)
+![Figure 13.Predicted *Cebus capucinus* habitat suitability for 2000.](./Figures/Fig14.png)
 
-![Figure 15.Predicted *Cebus capucinus* habitat suitability for 2019.](Fig15.png)
+![Figure 15.Predicted *Cebus capucinus* habitat suitability for 2019.](./Figures/Fig15.png)
 
 To assess habitat suitability change across time, we fit a pixel based linear regression. We applied the `formaTrend()` function to the image collection of model predictions. This function fits a pixel-based linear regression on the 20-habitat suitability raster to identify areas where habitat suitability increased or decreased across the 20 years. The product is an image with two bands or interest, the slope of the linear regression and a t-test statistic on the significance of the slope. We create a mask using the t-test statistic to masked out from the temporal trend image (the slope of each pixel linear regression) all pixels with non-significant trends. 
 
@@ -1194,13 +1188,13 @@ We then plot the slope of the linear regression for each pixel. Positive values 
 // Section 9 - Fit linear regression on each pixel
 ///////////////////////////////////////////////////
 
-// Use the formaTrend funciton to fit a linear regression to the habitat suitability collection.
+// Use the formaTrend function to fit a linear regression to the habitat suitability collection.
 var TempTrend = HSI.formaTrend();
 //print(TempTrend);
 
 // Display pixels with significative trends at an alpha = 0.05.
 // To mask out pixels with non-significative trends, we need to find those pixels with 
-// as two tailed t-test statistic larger or lower than the threshold value for the specific dregrees of freedom.
+// a two tailed t-test statistic larger or lower than the threshold value for the specific degrees of freedom.
 // In our case, we have 20 years, so 19 degrees of freedom, at an alpha of 0.05 is equal to 2.093 and -2.093
 var negative = TempTrend.select('long-tstat').lt(-2.093);
 var possitive = TempTrend.select('long-tstat').gt(2.093);
@@ -1233,7 +1227,7 @@ Map.add(legend);
 ```
 
 
-![Figure 16.Regression slope showing a grade from positive (green), to neutral (yellow), to negative (red) trends in habitat suitability change between 2000 and 2019 for *Cebus capucinus*.](Fig16.png)
+![Figure 16.Regression slope showing a grade from positive (green), to neutral (yellow), to negative (red) trends in habitat suitability change between 2000 and 2019 for *Cebus capucinus*.](./Figures/Fig16.png)
 
 It is also possible to create a gif animation showing the change of habitat suitability across years.
 
@@ -1256,7 +1250,7 @@ var gifParams = {
 print(rgbVis.getVideoThumbURL(gifParams));
 ```
 
-
+![Figure 17.*Cebus capucinus* habitat suitability change across years.](./Figures/Fig17.gif)
 
 As before, we can export results into Google Drive.
 
@@ -1293,7 +1287,8 @@ It is important that the data set that is uploaded into GEE as an asset contains
 ///////////////////////////////
 
 // Load presence absence data
-var Data = ee.FeatureCollection('users/yourdata');
+//var Data = ee.FeatureCollection('users/yourdata');
+var Data = table
 print('Data size:', Data.size());
 
 // Define spatial resolution to work with (m)
@@ -1638,7 +1633,7 @@ function getAcc(img,TP){
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
   // true-negative rate, specificity  
   var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
-  // false-possitive and false-possitive rate
+  // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
   // precision
@@ -1680,7 +1675,7 @@ print('Mean AUC-ROC', AUCROCs.reduce(ee.Reducer.mean()));
 // In a batch mode, the final image needs to exported to Google Drive and opened in 
 // another software for visualization.
 
-// Function to extract theshold values
+// Function to extract threshold values
 function getThreshold(x){
   var HSM = ee.Image(images.get(x));
   var TData = ee.FeatureCollection(TestingDatasets.get(x));
@@ -1753,7 +1748,7 @@ Export.table.toDrive({
 */
 ```
 
-
+***
 
 
 # References
@@ -1787,4 +1782,3 @@ Phillips, S. J., Anderson, R. P., & Schapire, R. E. (2006). Maximum entropy mode
 Phillips, S. J., Dudík, M., Elith, J., Graham, C. H., Lehmann, A., Leathwick, J., & Ferrier, S. (2009). Sample selection bias and presence-only distribution models: Implications for background and pseudo-absence data. Ecological Applications, 19(1), 181–197. https://doi.org/10.1890/07-2153.1
 
 Sofaer, H. R., Hoeting, J. A., & Jarnevich, C. S. (2019). The area under the precision-recall curve as a performance metric for rare binary events. Methods in Ecology and Evolution, 10(4), 565–577. https://doi.org/10.1111/2041-210X.13140
-
