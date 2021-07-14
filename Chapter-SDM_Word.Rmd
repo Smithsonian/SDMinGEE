@@ -1,5 +1,5 @@
 ---
-title: Supplemental Materials - Apendix 1 - Implementation of species distribution
+title: Supplemental Materials - Appendix 1 - Implementation of species distribution
   models in Google Earth Engine
 author: ""
 date: ""
