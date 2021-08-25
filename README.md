@@ -11,7 +11,7 @@ The Google Earth Engine code and data used in this study are freely available at
 
 The tutorial to use the code to fit species distribution models in Google Earth Engine is available at: https://turbo-waddle-5e55336c.pages.github.io/
 
-Dr. Crego is a postdoctoral researcher at the Smithsonian Conservation Biology Institute (USA). He spatializes in spatial ecology and conservation biology. He uses a combination of field data collection, remote sensing, and advanced modeling to investigate how species adapt to rapid global changes.
+Dr. Crego is a postdoctoral researcher at the Smithsonian Conservation Biology Institute (USA). He specializes in spatial ecology and conservation biology. He uses a combination of field data collection, remote sensing, and advanced modeling to investigate how species adapt to rapid global changes.
 
 Dr. Stabach is an ecologist at the Smithsonian Conservation Biology Institute (USA) and program coordinator of the Smithsonian Institution’s Movement of Life Initiative. His research focuses on the factors that affect the abundance, distribution, and movement patterns of large terrestrial mammals, incorporating remotely sensed- and field data-derived variables to relate to animal point locations to address applied research questions.
 
