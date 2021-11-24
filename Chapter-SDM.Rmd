@@ -27,7 +27,7 @@ knit: (function(input_file, encoding) {
 
 This is a guide for modeling species distributions and habitat suitability in Google Earth Engine. This guide is intended to explain the details of the Earth Engine code developed for this manuscript.
 
-We first cover the basics for importing data and setting the main arguments used in different functions, such as, grid size ant the aera of interest. We then expand on different modeling workflows.
+We first cover the basics for importing data and setting the main arguments used in different functions, such as, grid size ant the area of interest. We then expand on different modeling workflows using three different case studies to demonstrate how to adapt the code workflow for different goals.
 
 For information on how to set up a Google Earth Engine account as well as user guidelines and tutorials visit: <https://developers.google.com/earth-engine/>
 
@@ -39,7 +39,7 @@ The code found below can also be accessed through the GEE repository for this st
 
 ## Importing species location data as an asset
 
-Data sets need to be uploaded as assets in Google Earth Engine. The easiest way to do this is by creating a csv file with spatial coordinates and any other desired information. Note that you can also upload an ESRI  Shapefile with the species location data.
+Datasets need to be uploaded as assets in Google Earth Engine. The easiest way to do this is by creating a csv file with spatial coordinates and any other desired information. Note that you can also upload an ESRI Shapefile with the species location data.
 
 Below is an example for uploading the *Bradypus variegatus* data set from a `csv` file. Prepare a `csv` file with coordinates in latitude and longitude (EPSG:4326). To include a column with date use format Year-Month-Day (e.g., 2000-01-30).
 
@@ -118,7 +118,7 @@ Another option is to select a bounding box around your species location data. Fo
 var AOI = Data.geometry().bounds().buffer(50000);
 ```
 
-To display the study area on the map use the following code:
+To display the study area on the map use the following code and assign the map layer the name ‘AOI’:
 
 ```{js, eval=F}
 // Add AOI to the map
@@ -128,7 +128,9 @@ Map.addLayer(AOI, {}, 'AOI', 1); // The number 1 indicates the zoom level. Highe
 ## Selecting predictor variables
 
 One of the main advantages of implementing SDMs in Google Earth Engine is to make use of the large number of datasets available as predictor variables. This includes not only the bioclimatic variables from Hijmans et al. (2005), but elevation data and derivatives (slope, aspect, hillside, etc.), diverse vegetation indices, human modification indices, nighttime light images, water bodies, hourly climatic data, land cover classifications, roads or other infrastructure and even the raw pixel values of satellite data. Depending on your area of interest, certain regions have greater data availability. GEE also offers the opportunity to directly include user-derived datasets in your analysis, such as processed satellite imagery (e.g., a land cover classification that you previously developed for your area of interest).
+
 Selecting predictor variables is a step in which the researcher needs to rely on existing knowledge of the study species, such as the variables that may affect its distribution, etc.
+
 To find spatial data sets, you can use the search bar. All information related to each spatial dataset is available by clicking on the name of the product. The code necessary to import the dataset is available as shown in the following figure.
 
 ![Figure S3. SRTM Digital Elevation Data description with code to import the dataset](./Figures/Fig3.JPG)
@@ -142,6 +144,73 @@ Note that the GEE function `ee.Algorithms.Terrain()` allows you to calculate slo
 
 We will demonstrate different ways to import and manipulate spatial data sets with the specific examples below.
 
+## Defining an area to create pseudo-absences
+
+When using presence only data, the most common methodology when using data from online databases such as, GBIF, it is important to define the area to create pseudo-absences. Here we show how to implement three different methodologies. In all three, first we create a mask of the location of the presence data to avoid randomly generating pseudo-absences at the same pixel than presences. 
+
+a) Generate random pseudo-absences across the entire study area. Not recommended.
+
+```{js, eval=F}
+// Make an image out of the presence locations. The pixels where we have presence locations will be removed from the area to generate pseudo-absences.
+// This will impede having presence and pseudo-absences in the same pixel. 
+var mask = Data
+  .reduceToImage({
+    properties: ['random'],
+    reducer: ee.Reducer.first()
+}).reproject('EPSG:4326', null, ee.Number(GrainSize));
+
+var AreaForPA = mask.mask().updateMask(watermask).clip(AOI);
+```
+
+
+b) Generate pseudo-absences within a specified distance from presence locations to limit pseudo-absences to areas potentially accessible to the species (Araújo et al., 2019) and to account for the potential geographical or environmental sampling bias of presence records by creating pseudo-absences with a similar sampling bias (Phillips et al., 2009). The `buffer()` function determines the area available for generating pseudo-absences, assuming that these areas have the same sampling bias than the records and represent areas where animals can disperse. The `buffer()` function has two arguments, the distance in meters for the buffer and the maximum amount of error tolerated when approximating the buffer circle. Larger maximum errors improve computing efficiency.
+
+```{js, eval=F}
+// Make an image out of the presence locations. The pixels where we have presence locations will be removed from the area to generate pseudo-absences.
+// This will impede having presence and pseudo-absences in the same pixel. 
+var mask = Data
+  .reduceToImage({
+    properties: ['random'],
+    reducer: ee.Reducer.first()
+}).reproject('EPSG:4326', null, ee.Number(GrainSize));
+
+// Option 2: Spatially constrained pseudo-absence selection to a buffer around presence points.
+var buffer = 500000; // Distance in meters.
+var AreaForPA = Data.geometry().buffer(buffer, 1000);
+var AreaForPA = mask.mask().clip(AreaForPA).updateMask(watermask).clip(AOI);
+right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
+```
+
+c) Limit the area to select pseudo-absences by implementing an environmental profiling technique, masking out the known environmentally suitable locations, similar to other two-steps methods for generating pseudo-absences (). 
+
+This method requires fitting a cluster function to the occurrence data. When you have a large presence dataset, you can randomly choose a subset of the data with this line of code: `Data.randomColumn().sort('random').limit(200)` where the number in `limit()` specifies the number of random presence used to train the clusterer. A critical step is to display the cluster results and identify the correct cluster, zero or one, to use for creation of pseudo-absences. The cluster ID is assigned in a non consistent manner and can change even when changing the order of the same data input. It is important then to display and visually identify the correct cluster ID to create the mask: `var mask2 = Clresult.select(['cluster']).eq(1)`.
+
+```{js, eval=F}
+// Make an image out of the presence locations. The pixels where we have presence locations will be removed from the area to generate pseudo-absences.
+// This will impede having presence and pseudo-absences in the same pixel. 
+var mask = Data
+  .reduceToImage({
+    properties: ['random'],
+    reducer: ee.Reducer.first()
+}).reproject('EPSG:4326', null, ee.Number(GrainSize));
+
+//Option 3: Environmental pseudo-absences selection (environmental profiling)
+// Extract environmental values for the presence data
+var PixelVals = predictors.sampleRegions({collection: Data.randomColumn().sort('random').limit(200), properties: [], tileScale: 16, scale: GrainSize});
+// Instantiate the clusterer and train it using euclidean distance.
+var clusterer = ee.Clusterer.wekaKMeans({nClusters:2, distanceFunction:"Euclidean"}).train(PixelVals);
+// Cluster the input using the trained clusterer.
+var Clresult = predictors.cluster(clusterer);
+// Display cluster results and identify the cluster ID similar and dissimilar to presence data
+right.addLayer(Clresult.randomVisualizer(), {}, 'Clusters', 0);
+// Mask cluster that is disimilar to presence data. In this case, cluster 1.
+var mask2 = Clresult.select(['cluster']).eq(1)
+var AreaForPA = mask.mask().updateMask(mask2).clip(AOI);
+
+// Display area for creation of pseudo-absence
+right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
+```
+
 
 ***
 
@@ -151,7 +220,7 @@ To demonstrate the basic code to conduct SDMs in Google Earth Engine, we will us
 
 ## Loading species location data
 
-We upload the presence data set, specify the spatial scale to work with and randomly select one occurrence location per 5km grid cell.
+We upload the presence data set, specify the spatial scale to work with and randomly select one occurrence location per 1km grid cell.
 
 Note that the following code modifies the `ui.root` to display two maps on the map panel of the user interface, one for the habitat suitability map and one for the potential distribution map.
 
@@ -191,7 +260,7 @@ ui.Map.Linker([left, right], 'change-bounds');
 //left.addLayer(Data, {color:'red'}, 'Presence', 1);
 ```
 
-> In JavaScript you can activate or inactivate lines of code by using //. JavaScript will omit all the text that comes after the //. Commenting out code that prints objects or adds elements to the map is a good practice to keep the code clean. Sometimes it can help reducing the chance of reaching memory limits as we reduce the number of processes being called.
+> In JavaScript you can activate or inactivate lines of code by using //. JavaScript will omit all the text that comes after the //. Commenting out code that prints objects or adds elements to the map is a good practice to keep the code clean. Sometimes it can help reducing the chance of reaching memory limits as we reduce the number of processes being called. Another option is to use /* code */. All code in between will be inactivated.
 
 ![Figure S4. Presence data for Bradypus variegatus. Data were obtained from GBIF.](./Figures/Fig4.png)
 
@@ -205,7 +274,7 @@ The next step is to define the extent of the area of interest. Here we defined a
 ////////////////////////////////////////////
 
 // Define the AOI
-var AOI = Data.geometry().bounds().buffer(100000);
+var AOI = Data.geometry().bounds().buffer(50000, 1000);
 
 // Add border of study area to the map
 var outline = ee.Image().byte().paint({
@@ -291,16 +360,15 @@ print('Variables correlation matrix',CorrAll);
 
 ## Creating pseudo-absences
 
-In this example, we use presence only data, the most common methodology when using data from online databases such as, GBIF. We will generate pseudo-absences to fit the model. But first, we need to define the area in which random pseudo-absences can be generated. It is recommended to limit pseudo-absences within a buffer around each presence location in order to limit pseudo-absences to areas potentially accessible to the species (Araújo et al., 2019) and to account for the potential geographical or environmental sampling bias of presence records by creating pseudo-absences with a similar sampling bias (Phillips et al., 2009).
+In this example, we use presence only data, the most common methodology when using data from online databases such as, GBIF. We will generate pseudo-absences to fit the model. But first, we need to define the area in which random pseudo-absences can be generated. 
 
-The `buffer()` function determines the area available for generating pseudo-absences, assuming that these areas have the same sampling bias than the records and represent areas where animals can disperse. The `buffer()` function has two arguments, the distance in meters for the buffer and the maximum amount of error tolerated when approximating the buffer circle. Larger maximum errors improve computing efficiency.
+We used a two-step environmental profiling approach to restrict the area for the creation of pseudo-absences. We first fit a cluster with Euclidean distance to the presence data and then created random pseudo-absences within the area of the cluster more dissimilar to the presence data. 
 
-For our example We set a wide buffer of 500 km.
 
 ```{js, eval=F}
-/////////////////////////////////////////////////////////////////////////////
-// Section 4 - Defining spatial blocks for model fitting and cross validation
-/////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 4 - Defining area for pseudo-absences and spatial blocks for model fitting and cross validation
+////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Make an image out of the presence locations. The pixels where we have presence locations will be removed from the area to generate pseudo-absences.
 // This will impede having presence and pseudo-absences in the same pixel. 
@@ -310,21 +378,37 @@ var mask = Data
     reducer: ee.Reducer.first()
 }).reproject('EPSG:4326', null, ee.Number(GrainSize));
 
-var AreaForPA = mask.mask().updateMask(watermask).clip(AOI); //Activate this line for using the entire AOI for generating random points
+// Option 1: Simple random pseudo-absence selection across the entire area of interest.
+// var AreaForPA = mask.mask().updateMask(watermask).clip(AOI);
 
-// Limit pseudo-absences to a buffer around presence points.
+// Option 2: Spatially constrained pseudo-absence selection to a buffer around presence points.
+//var buffer = 500000; // Distance in meters.
+//var AreaForPA = Data.geometry().buffer(buffer, 1000);
+//var AreaForPA = mask.mask().clip(AreaForPA).updateMask(watermask).clip(AOI);
+//right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
 
-var buffer = 500000; // Distance in meters.
-var AreaForPA = Data.geometry().buffer(buffer, 1000);
-var AreaForPA = mask.mask().clip(AreaForPA).updateMask(watermask).clip(AOI);
+//Option 3: Environmental pseudo-absences selection (environmental profiling)
+// Extract environmental values for the presence data
+var PixelVals = predictors.sampleRegions({collection: Data.randomColumn().sort('random').limit(200), properties: [], tileScale: 16, scale: GrainSize});
+// Instantiate the clusterer and train it using euclidean distance.
+var clusterer = ee.Clusterer.wekaKMeans({nClusters:2, distanceFunction:"Euclidean"}).train(PixelVals);
+// Cluster the input using the trained clusterer.
+var Clresult = predictors.cluster(clusterer);
+// Display cluster results and identify the cluster ID similar and dissimilar to presence data
+right.addLayer(Clresult.randomVisualizer(), {}, 'Clusters', 0);
+// Mask cluster that is disimilar to presence data. In this case, cluster 1.
+var mask2 = Clresult.select(['cluster']).eq(1)
+var AreaForPA = mask.mask().updateMask(mask2).clip(AOI);
+
+// Display area for creation of pseudo-absence
 right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
 ```
 
 ![Figure S7. Example of creating random pseudoabsences within a buffer distance. The enlarged box shows how pixels with presence locations are masked to avoid creating pseudo-absences in the same location as presences.](./Figures/Fig7.png)
 
-We will implement a block repeated split-sample cross-validation technique to randomly partition data for model training and validation (Roberts et al., 2017; Valavi, Elith, Lahoz-Monfort, & Guillera-Arroita, 2019). We will then run multiple model iterations with random block splits to create training and validation data sets.
+For this case study we implement a block repeated split-sample cross-validation technique to randomly partition data for model training and validation (Roberts et al., 2017; Valavi, Elith, Lahoz-Monfort, & Guillera-Arroita, 2019). We will then run multiple model iterations with random block splits to create training and validation data sets.
 
-The argument `scale` determines the range in m for each block. In this case we are using 100 km.
+The argument `scale` determines the range in m for each block. In this case we are using 200 km.
 
 ```{js, eval=F}
 // Define a function to create a grid over AOI
@@ -345,19 +429,19 @@ function makeGrid(geometry, scale) {
   return lonGrid
     .multiply(latGrid)
     .reduceToVectors({
-      geometry: geometry.buffer(1000000, 1000), //Buffer to expand grid and include borders
+      geometry: geometry.buffer(20000,1000),
       scale: scale,
       geometryType: 'polygon',
     });
 }
 // Create grid and remove cells outside AOI
-var Scale = 100000; // Set range in m to create spatial blocks
+var Scale = 200000; // Set range in m to create spatial blocks
 var grid = makeGrid(AOI, Scale);
-var Grid = AreaForPA.reduceRegions({collection: grid, reducer: ee.Reducer.mean()}).filter(ee.Filter.neq('mean',null));
+var Grid = watermask.reduceRegions({collection: grid, reducer: ee.Reducer.mean()}).filter(ee.Filter.neq('mean',null));
 right.addLayer(Grid, {},'Grid for spatail block cross validation', 0);
 ```
 
-![Figure S8. Example of two spatial blocks created for cross validation. In the two examples shown here, blocks of 500 x 500 km have been randomly split in 70% for training data (blue) and 30% for validation data (red).](./Figures/Fig8.png)
+![Figure S8. Visualization of blocks created for cross validation.](./Figures/Fig8.png)
 
 
 ## Model fit, model validation and model predictions
@@ -499,7 +583,7 @@ Now we can extract the model predictions and display them on the maps. Note we w
 // Set visualization parameters
 var visParams = {
   min: 0,
-  max: 0.8,
+  max: 1,
   palette: ["#440154FF","#482677FF","#404788FF","#33638DFF","#287D8EFF",
   "#1F968BFF","#29AF7FFF","#55C667FF","#95D840FF","#DCE319FF"],
 };
@@ -528,20 +612,31 @@ legend.add(ui.Label({
   style: {fontWeight: 'bold', fontSize: '18px', margin: '0 0 4px 0', padding: '0px'}
 }));
 
-var colors = ["#DCE319FF","#287D8EFF","#440154FF"];
-var names = ['High', 'Medium','Low'];
-var entry;
-for (var x = 0; x<3; x++){
-  entry = [
-    ui.Label({style:{color:colors[x],margin: '0 0 4px 0'}, value:'██'}),
-    ui.Label({value: names[x],style: {margin: '0 0 4px 4px'}})
-  ];
-  legend.add(ui.Panel(entry, ui.Panel.Layout.Flow('horizontal')));
-}
+legend.add(ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select(0),
+  params: {
+    bbox: [0,0,1,0.1],
+    dimensions: '200x20',
+    format: 'png',
+    min: 0,
+    max: 1,
+    palette: ["#440154FF","#482677FF","#404788FF","#33638DFF","#287D8EFF",
+  "#1F968BFF","#29AF7FFF","#55C667FF","#95D840FF","#DCE319FF"]
+  },
+  style: {stretch: 'horizontal', margin: '8px 8px', maxHeight: '40px'},
+}));
+
+legend.add(ui.Panel({
+  widgets: [
+    ui.Label('Low', {margin: '0px 0px', textAlign: 'left', stretch: 'horizontal'}),
+    ui.Label('Medium', {margin: '0px 0px', textAlign: 'center', stretch: 'horizontal'}),
+    ui.Label('High', {margin: '0px 0px', textAlign: 'right', stretch: 'horizontal'}),
+    ],layout: ui.Panel.Layout.Flow('horizontal')
+}));
 
 legend.add(ui.Panel(
-  [ui.Label({value: "Presence locations",style: {fontWeight: 'bold', fontSize: '16px', margin: '0 0 4px 0'}}),
-   ui.Label({style:{color:"red",margin: '0 0 0 4px'}, value:'◉'})],
+  [ui.Label({value: "Presence locations",style: {fontWeight: 'bold', fontSize: '16px', margin: '4px 0 4px 0'}}),
+   ui.Label({style:{color:"red",margin: '4px 0 0 4px'}, value:'◉'})],
   ui.Panel.Layout.Flow('horizontal')));
 
 left.add(legend);
@@ -553,7 +648,7 @@ left.add(legend);
 var images2 = ee.List.sequence(1,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
   return results.get(x)});
 
-// Calculate mode of binary outputs from all individual model runs
+// Calculate mean of all indivudual model runs
 var DistributionMap = ee.ImageCollection.fromImages(images2).mode();
 
 // Add final distribution map and presence locations to the map
@@ -574,8 +669,8 @@ var names2 = ['Presence', 'Absence'];
 var entry2;
 for (var x = 0; x<2; x++){
   entry2 = [
-    ui.Label({style:{color:colors2[x],margin: '0 0 4px 0'}, value:'██'}),
-    ui.Label({value: names2[x],style: {margin: '0 0 4px 4px'}})
+    ui.Label({style:{color:colors2[x],margin: '4px 0 4px 0'}, value:'██'}),
+    ui.Label({value: names2[x],style: {margin: '4px 0 4px 4px'}})
   ];
   legend2.add(ui.Panel(entry2, ui.Panel.Layout.Flow('horizontal')));
 }
@@ -683,17 +778,17 @@ Accuracy assessment results are:
 
 Model | AUC-ROC | AUC-PR
 ------|-------|-------
-Run 1 | 0.91 | 0.91
-Run 2 | 0.84 | 0.78
-Run 3 | 0.79 | 0.81
-Run 4 | 0.78 | 0.77
-Run 5 | 0.79 | 0.76
-Run 6 | 0.90 | 0.83
-Run 7 | 0.84 | 0.77
-Run 8 | 0.89 | 0.80
-Run 9 | 0.79 | 0.75
-Run 10 | 0.73 | 0.72
-**Mean**| **0.82** | **0.79**
+Run 1 | 0.95 | 0.81
+Run 2 | 0.79 | 0.73
+Run 3 | 0.76 | 0.74
+Run 4 | 0.96 | 0.94
+Run 5 | 0.97 | 0.91
+Run 6 | 0.97 | 0.77
+Run 7 | 0.87 | 0.83
+Run 8 | 0.97 | 0.92
+Run 9 | 0.94 | 0.83
+Run 10 | 0.84 | 0.80
+**Mean**| **0.90** | **0.83**
 
 
 In the next section we can generate a binary map from the habitat suitability model using the mean of the thresholds that maximized the sum of sensitivity (correct predictions of the occurrence) and specificity (correct predictions of the absence) for each of the individual model runs. This threshold has been shown to perform well with presence-only data (Liu, Newell, & White, 2016). This operation is more computationally demanding and is likely to give a memory limit error if trying to add the resulting binary image directly to the interactive map. If memory limits are reached, it is then necessary to use the batch mode on GEE, directly exporting the output to Google Drive or Google Storage.
@@ -748,6 +843,7 @@ There are different ways in which data can be exported in GEE. In the previous s
 //////////////////////////////////////////////////////
 
 // Export final model to drive
+
 Export.image.toDrive({
   image: DistributionMap, //Object to export
   description: 'PotentialDistribution', //Name of the file
@@ -764,9 +860,27 @@ Export.image.toDrive({
   region: AOI //Area of interest
 });
 
+// Export Accuracy Assessment Metrics
+Export.table.toDrive({
+  collection: ee.FeatureCollection(AUCROCs
+                        .map(function(element){
+                        return ee.Feature(null,{AUCROC:element})})),
+  description: 'AUCRO',
+  fileFormat: 'CSV',
+});
+
+Export.table.toDrive({
+  collection: ee.FeatureCollection(AUCPRs
+                        .map(function(element){
+                        return ee.Feature(null,{AUCPR:element})})),
+  description: 'AUCPR',
+  fileFormat: 'CSV',
+});
+
+
 // Export training and validation data sets
 
-// Extract training data sets
+// Extract training datasets
 var TrainingDatasets = ee.List.sequence(1,ee.Number(numiter).multiply(4).subtract(1),4).map(function(x){
   return results.get(x)});
 
@@ -776,16 +890,18 @@ var TrainingDatasets = ee.List.sequence(1,ee.Number(numiter).multiply(4).subtrac
 // For other iterations you need to change the number in the get function. In JavaScript the first element of the list is indexed by 0.
 
 Export.table.toDrive({
-  collectio : TrainingDatasets.get(0),
+  collection: TrainingDatasets.get(0),
   description: 'TestingDataRun1',
   fileFormat: 'CSV',
 });
 
 Export.table.toDrive({
-  collectio : TestingDatasets.get(0),
+  collection: TestingDatasets.get(0),
   description: 'TestingDataRun1',
   fileFormat: 'CSV',
 });
+/*
+*/
 ```
 
 ***
@@ -1285,6 +1401,11 @@ Export.image.toDrive({
    region: AOI //Area of interest
  });
 ```
+
+
+# Case Study 3: 
+
+
 
 
 # Code to model presence-absence data
