@@ -404,7 +404,8 @@ var AreaForPA = mask.mask().updateMask(mask2).clip(AOI);
 right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
 ```
 
-![Figure S7. Example of creating random pseudoabsences within a buffer distance. The enlarged box shows how pixels with presence locations are masked to avoid creating pseudo-absences in the same location as presences.](./Figures/Fig7.png)
+![Figure S7a. Results from cluster analysis.](./Figures/Fig7a.png)
+![Figure S7b. Area to create pseudo-absences.](./Figures/Fig7b.png)
 
 For this case study we implement a block repeated split-sample cross-validation technique to randomly partition data for model training and validation (Roberts et al., 2017; Valavi, Elith, Lahoz-Monfort, & Guillera-Arroita, 2019). We will then run multiple model iterations with random block splits to create training and validation data sets.
 
