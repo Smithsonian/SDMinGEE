@@ -91,6 +91,8 @@ print(Data.size())
 
 ## Define your area of interest for modeling
 
+The extent of the analysis should be carefully selected and constrained to a realistic realm of the species of study, avoiding unrealistic extents that can hamper model accuracy and predictions (Guisan et al., 2017; Leroy et al., 2018; Sillero et al., 2021). 
+
 There are different ways you can define your area of interest. You can directly draw a polygon using the drawing tools in GEE or manually set the polygon (e.g., Case Study 2 in this tutorial). Here, we present two methods for automating this process. 
 
 If you are interested in working with a specific country or continent, you can use the Large Scale International Boundary Polygons data set available in GEE catalog. 
@@ -146,9 +148,9 @@ We will demonstrate different ways to import and manipulate spatial data sets wi
 
 ## Defining an area to create pseudo-absences
 
-When using presence only data, the most common methodology when using data from online databases such as, GBIF, it is important to define the area to create pseudo-absences. Here we show how to implement three different methodologies. In all three, first we create a mask of the location of the presence data to avoid randomly generating pseudo-absences at the same pixel than presences. 
+When using presence only data, the most common methodology when using data from online databases such as, GBIF, it is important to define the area to create pseudo-absences. Choosing the proper method is a critical step as it can affect model performance (Barbet-Massin, Jiguet, Albert, & Thuiller, 2012).  Here we show how to implement three different methodologies. In all three, we first create a mask of the location of the presence data to avoid randomly generating pseudo-absences at the same pixel than presences.
 
-a) Generate random pseudo-absences across the entire study area. Not recommended.
+a) Generate random pseudo-absences across the entire study area. 
 
 ```{js, eval=F}
 // Make an image out of the presence locations. The pixels where we have presence locations will be removed from the area to generate pseudo-absences.
@@ -181,9 +183,9 @@ var AreaForPA = mask.mask().clip(AreaForPA).updateMask(watermask).clip(AOI);
 right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
 ```
 
-c) Limit the area to select pseudo-absences by implementing an environmental profiling technique, masking out the known environmentally suitable locations, similar to other two-steps methods for generating pseudo-absences (). 
+c) Limit the area to select pseudo-absences by implementing an environmental profiling technique, masking out the known environmentally suitable locations, similar to other two-steps methods for generating pseudo-absences (Chefaoui & Lobo, 2008; Senay, Worner, & Ikeda, 2013).
 
-This method requires fitting a cluster function to the occurrence data. When you have a large presence dataset, you can randomly choose a subset of the data with this line of code: `Data.randomColumn().sort('random').limit(200)` where the number in `limit()` specifies the number of random presence used to train the clusterer. A critical step is to display the cluster results and identify the correct cluster, zero or one, to use for creation of pseudo-absences. The cluster ID is assigned in a non consistent manner and can change even when changing the order of the same data input. It is important then to display and visually identify the correct cluster ID to create the mask: `var mask2 = Clresult.select(['cluster']).eq(1)`.
+This method requires fitting a cluster function to the occurrence data. When you have a large presence dataset, you can randomly choose a subset of the data with this line of code: `Data.randomColumn().sort('random').limit(200)` where the number in `limit()` specifies the number of random presence used to train the clusterer. A critical step is to display the cluster results and identify the correct cluster, zero or one, to use for creation of pseudo-absences. The cluster ID is assigned in a non consistent manner and can change even when changing the order of the same data input. We wrote a line of code to automatically identify the cluster ID to define the area to create pseudo-absences. But it is important to display the cluster results and confirm that the cluster worked properly and that the correct cluster ID was identified before creating the mask: `var mask2 = Clresult.select(['cluster']).eq(clustID)`.
 
 ```{js, eval=F}
 // Make an image out of the presence locations. The pixels where we have presence locations will be removed from the area to generate pseudo-absences.
@@ -204,7 +206,11 @@ var Clresult = predictors.cluster(clusterer);
 // Display cluster results and identify the cluster ID similar and dissimilar to presence data
 right.addLayer(Clresult.randomVisualizer(), {}, 'Clusters', 0);
 // Mask cluster that is disimilar to presence data. In this case, cluster 1.
-var mask2 = Clresult.select(['cluster']).eq(1)
+// Obtain the ID of the cluster similar to data and use the oposite to define the area to create pseudo-absences.
+var clustID = Clresult.sampleRegions({collection: Data.randomColumn().sort('random').limit(200), properties: [], tileScale: 16, scale: GrainSize});
+clustID = ee.FeatureCollection(clustID).reduceColumns(ee.Reducer.mode(),['cluster']);
+clustID = ee.Number(clustID.get('mode')).subtract(1).abs();
+var mask2 = Clresult.select(['cluster']).eq(clustID);
 var AreaForPA = mask.mask().updateMask(mask2).clip(AOI);
 
 // Display area for creation of pseudo-absence
@@ -234,7 +240,7 @@ var Data = ee.FeatureCollection('users/ramirocrego84/BradypusVariegatus');
 print('Original data size:', Data.size());
 
 // Define spatial resolution to work with (m)
-var GrainSize = 5000;
+var GrainSize = 1000;
 
 function RemoveDuplicates(data){
   var randomraster = ee.Image.random().reproject('EPSG:4326', null, GrainSize);
@@ -274,7 +280,7 @@ The next step is to define the extent of the area of interest. Here we defined a
 ////////////////////////////////////////////
 
 // Define the AOI
-var AOI = Data.geometry().bounds().buffer(50000, 1000);
+var AOI = Data.geometry().bounds().buffer({distance:50000, maxError:1000});
 
 // Add border of study area to the map
 var outline = ee.Image().byte().paint({
@@ -362,7 +368,7 @@ print('Variables correlation matrix',CorrAll);
 
 In this example, we use presence only data, the most common methodology when using data from online databases such as, GBIF. We will generate pseudo-absences to fit the model. But first, we need to define the area in which random pseudo-absences can be generated. 
 
-We used a two-step environmental profiling approach to restrict the area for the creation of pseudo-absences. We first fit a cluster with Euclidean distance to the presence data and then created random pseudo-absences within the area of the cluster more dissimilar to the presence data. 
+We used a two-step environmental profiling approach to restrict the area for the creation of pseudo-absences. We first fit a cluster with Euclidean distance to the presence data and then created random pseudo-absences within the area of the cluster more dissimilar to the presence data.
 
 
 ```{js, eval=F}
@@ -383,7 +389,7 @@ var mask = Data
 
 // Option 2: Spatially constrained pseudo-absence selection to a buffer around presence points.
 //var buffer = 500000; // Distance in meters.
-//var AreaForPA = Data.geometry().buffer(buffer, 1000);
+//var AreaForPA = Data.geometry().buffer({distance:buffer, maxError:1000});
 //var AreaForPA = mask.mask().clip(AreaForPA).updateMask(watermask).clip(AOI);
 //right.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
 
@@ -397,7 +403,11 @@ var Clresult = predictors.cluster(clusterer);
 // Display cluster results and identify the cluster ID similar and dissimilar to presence data
 right.addLayer(Clresult.randomVisualizer(), {}, 'Clusters', 0);
 // Mask cluster that is disimilar to presence data. In this case, cluster 1.
-var mask2 = Clresult.select(['cluster']).eq(1)
+// Obtain the ID of the cluster similar to data and use the oposite to define the area to create pseudo-absences.
+var clustID = Clresult.sampleRegions({collection: Data.randomColumn().sort('random').limit(200), properties: [], tileScale: 16, scale: GrainSize});
+clustID = ee.FeatureCollection(clustID).reduceColumns(ee.Reducer.mode(),['cluster']);
+clustID = ee.Number(clustID.get('mode')).subtract(1).abs();
+var mask2 = Clresult.select(['cluster']).eq(clustID);
 var AreaForPA = mask.mask().updateMask(mask2).clip(AOI);
 
 // Display area for creation of pseudo-absence
@@ -430,7 +440,7 @@ function makeGrid(geometry, scale) {
   return lonGrid
     .multiply(latGrid)
     .reduceToVectors({
-      geometry: geometry.buffer(20000,1000),
+      geometry: geometry.buffer({distance:20000,maxError:1000}), //The buffer allows you to make sure the grid inclused the borders of the AOI.
       scale: scale,
       geometryType: 'polygon',
     });
@@ -728,7 +738,7 @@ function getAcc(img,TP){
   var Precision = TP.divide(TP.add(FP));
   // sum of sensitivity and specificity
   var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
   }));
 }
 
@@ -779,20 +789,53 @@ Accuracy assessment results are:
 
 Model | AUC-ROC | AUC-PR
 ------|-------|-------
-Run 1 | 0.95 | 0.81
-Run 2 | 0.79 | 0.73
-Run 3 | 0.76 | 0.74
-Run 4 | 0.96 | 0.94
-Run 5 | 0.97 | 0.91
-Run 6 | 0.97 | 0.77
-Run 7 | 0.87 | 0.83
-Run 8 | 0.97 | 0.92
+Run 1 | 0.95 | 0.78
+Run 2 | 0.88 | 0.81
+Run 3 | 0.79 | 0.77
+Run 4 | 0.96 | 0.88
+Run 5 | 0.97 | 0.92
+Run 6 | 0.96 | 0.78
+Run 7 | 0.87 | 0.82
+Run 8 | 0.97 | 0.91
 Run 9 | 0.94 | 0.83
-Run 10 | 0.84 | 0.80
-**Mean**| **0.90** | **0.83**
+Run 10 | 0.83 | 0.78
+**Mean**| **0.91** | **0.83**
 
+In the next section we will extract sensitivity (correct predictions of the occurrence) and specificity (correct predictions of the absence; Fielding & Bell, 1997). These metrics require defining a threshold. For each iteration, we use the threshold that maximizes the sum of sensitivity and specificity. This threshold has been shown to perform well with presence-only data (Liu, Newell, & White, 2016). 
+```{js, eval=F}
+// Function to extract other metrics
+function getMetrics(x){
+  var HSM = ee.Image(images.get(x));
+  var TData = ee.FeatureCollection(TestingDatasets.get(x));
+  var Acc = getAcc(HSM, TData);
+  return Acc.sort({property:'SUMSS',ascending:false}).first();
+}
 
-In the next section we can generate a binary map from the habitat suitability model using the mean of the thresholds that maximized the sum of sensitivity (correct predictions of the occurrence) and specificity (correct predictions of the absence) for each of the individual model runs. This threshold has been shown to perform well with presence-only data (Liu, Newell, & White, 2016). This operation is more computationally demanding and is likely to give a memory limit error if trying to add the resulting binary image directly to the interactive map. If memory limits are reached, it is then necessary to use the batch mode on GEE, directly exporting the output to Google Drive or Google Storage.
+// Extract sensitivity, specificity and mean threshold values
+var Metrics = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(getMetrics);
+print('Sensitivity:', ee.FeatureCollection(Metrics).aggregate_array("TPR"));
+print('Specificity:', ee.FeatureCollection(Metrics).aggregate_array("TNR"));
+
+var MeanThresh = ee.Number(ee.FeatureCollection(Metrics).aggregate_array("cutoff").reduce(ee.Reducer.mean()));
+print('Mean threshold:', MeanThresh);
+
+```
+
+Model | Sensitivity | Specificity
+------|-------|-------
+Run 1 | 0.82 | 0.94
+Run 2 | 1.00 | 0.63
+Run 3 | 0.89 | 0.63
+Run 4 | 0.93 | 0.91
+Run 5 | 0.96 | 0.87
+Run 6 | 0.90 | 0.96
+Run 7 | 0.75 | 0.84
+Run 8 | 0.92 | 0.90
+Run 9 | 0.89 | 0.82
+Run 10 | 0.91 | 0.65
+**Mean**| **0.90** | **0.81**
+
+Finally, we can create a binary potential distribution map using the mean threshold from the 10 model iterations.This operation is more computationally demanding and is likely to give a memory limit error if trying to add the resulting binary image directly to the interactive map. If memory limits are reached, it is then necessary to use the batch mode on GEE, directly exporting the output to Google Drive or Google Storage.
 
 ```{js, eval=F}
 ////////////////////////////////////////////////////////////////////////////////
@@ -801,41 +844,21 @@ In the next section we can generate a binary map from the habitat suitability mo
 
 // Calculating the potential distribution map based on the threshold 
 // that maximizes the sum of sensitivity and specificity is computationally intensive and
-// for large number of iterations may need to be executed usingbatch mode.
+// for large number of iterations may need to be executed using batch mode.
 // In batch mode, the final image needs to exported to Google Drive and opened in 
 // another software for visualization (or imported to GEE as an asset for visualization.
-
-// Function to extract theshold values
-function getThreshold(x){
-  var HSM = ee.Image(images.get(x));
-  var TData = ee.FeatureCollection(TestingDatasets.get(x));
-  var Acc = getAcc(HSM, TData);
-  return Acc.sort({property:'SUMSS',ascending:false}).first().get("cutoff");
-}
-
-// Extract threshold values
-var Thresholds = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(getThreshold);
-var MT = ee.Number(Thresholds.reduce(ee.Reducer.mean()));
-print('Mean threshold:', MT);
-
 // Transform probability model output into a binary map using the defined threshold and set NA into -9999
-var DistributionMap2 = ModelAverage.gte(MT).unmask(-9999);
-
-// Export final model to drive
-Export.image.toDrive({
-  image: DistributionMap2,
-  description: 'BradypusPDistribution',
-  scale: GrainSize,
-  maxPixels: 1e10,
-  region: AOI
-});
+// Transform probability model output into a binary map using the defined threshold and set NA into -9999
+var DistributionMap2 = ModelAverage.gte(MeanThresh);
 ```
+
+In the next section we will show how to export results to Google Drive to then display it on a third party software.
 
 ![Figure S10. Potential distribution of *Bradypus variegatus* calculated using a custom threshold. The final map was exported to Google Drive and displayed using QGIS.](./Figures/Fig10.png)
 
 ## Exporting results
 
-There are different ways in which data can be exported in GEE. In the previous section we saw how to export the binary map to Google Drive. Next, we present code to export the final probability model as well as the training and validation data sets used for each model. Note that there are other options to export data in GEE (see the <https://developers.google.com/earth-engine/guides/exporting/>(user guide) for other ways to export data).
+Here, we present code to export the final probability models as well as the accuracy metrics, training and validation data sets used for each model. Note that there are other options to export data in GEE (see the <https://developers.google.com/earth-engine/guides/exporting/>(user guide) for other ways to export data).
 
 
 ```{js, eval=F}
@@ -843,16 +866,9 @@ There are different ways in which data can be exported in GEE. In the previous s
 // Section 9 - Export outputs
 //////////////////////////////////////////////////////
 
-// Export final model to drive
+// Export final model predictions to drive
 
-Export.image.toDrive({
-  image: DistributionMap, //Object to export
-  description: 'PotentialDistribution', //Name of the file
-  scale: GrainSize, //Spatial resolution of the exported raster
-  maxPixels: 1e10,
-  region: AOI //Area of interest
-});
-
+// Averaged habitat suitability
 Export.image.toDrive({
   image: ModelAverage, //Object to export
   description: 'HSI', //Name of the file
@@ -861,12 +877,32 @@ Export.image.toDrive({
   region: AOI //Area of interest
 });
 
+// Export final binary model based on a mayority vote
+Export.image.toDrive({
+  image: DistributionMap, //Object to export
+  description: 'PotentialDistribution', //Name of the file
+  scale: GrainSize, //Spatial resolution of the exported raster
+  maxPixels: 1e10,
+  region: AOI //Area of interest
+});
+
+// Export final binary model based on the threshold that maximises the sum of specificity and sensitivity
+Export.image.toDrive({
+  image: DistributionMap2.unmask(-9999),
+  description: 'PotentialDistributionThreshold',
+  scale: GrainSize,
+  maxPixels: 1e10,
+  region: AOI
+});
+
+
 // Export Accuracy Assessment Metrics
+
 Export.table.toDrive({
   collection: ee.FeatureCollection(AUCROCs
                         .map(function(element){
                         return ee.Feature(null,{AUCROC:element})})),
-  description: 'AUCRO',
+  description: 'AUCROC',
   fileFormat: 'CSV',
 });
 
@@ -878,6 +914,11 @@ Export.table.toDrive({
   fileFormat: 'CSV',
 });
 
+Export.table.toDrive({
+  collection: ee.FeatureCollection(Metrics),
+  description: 'Metrics',
+  fileFormat: 'CSV',
+});
 
 // Export training and validation data sets
 
@@ -910,6 +951,8 @@ Export.table.toDrive({
 # Case Study 2: Accounting for temporal resolution in species distribution models
 
 One main limitation in many SDMs is the lack of consideration for temporal resolution when modeling habitat suitability and species distributions (Araújo et al., 2019). We used **Cebus capucinus** as an example to demonstrate a framework that takes advantage of GEE to match the observation date for each presence record to the raster image from a collection that is closest in time.  For example, we could extract the normalized difference vegetation index (NDVI) at an occurrence location from the satellite image that is closest in time to that species observation.
+
+## Species data and AOI
 
 We obtained occurrence data from GBIF (GBIF.org (27 January 2021) https://doi.org/10.15468/dl.qus4ha). We retained only georeferenced records with a coordinate uncertainty < 250 m.
 
@@ -950,6 +993,7 @@ Map.centerObject(AOI, 6); //Number indicates the zoom level
 
 We will use data between 2003 and 2018 for model fitting, after filtering the data to retain a single record per year from each 250 m pixel. To do so, we need to run the `removeduplicate()` function for each year at the specified grain size and then merge filtered data from all years back together.
 
+## Define spatial resolution and remove duplicates
 
 ```{js, eval=F}
 //////////////////////////////////////////////////////////////
@@ -988,6 +1032,8 @@ var Data2 = Data03.merge(Data04).merge(Data05).merge(Data06).merge(Data07)
             .merge(Data08).merge(Data09).merge(Data10).merge(Data11).merge(Data12)
             .merge(Data13).merge(Data14).merge(Data15).merge(Data16).merge(Data17).merge(Data18);
 ```
+
+## Predictor Variables
 
 We will use mean annual temperature, annual precipitation (Hijmans et al. 2005), elevation (Farr et al. 2007) and percentage tree cover (Terra MODIS VCF, 250 m resolution) as predictor variables. We set the grain size of the analysis at 250 m resolution to match the MODIS data. 
 
@@ -1075,6 +1121,8 @@ Map.addLayer(DataFinal, {color:'red'}, 'Presence', 1)  //Add points to the map
 
 After all this process, we end up with 330 occurrence records.
 
+## Model fit
+
 The next step is to define an area to create pseudo-absences. We will first create an image where presence records are marked to avoid creating pseudo-absences in the same locations where we have known presences.
 
 ```{js, eval=F}
@@ -1148,6 +1196,8 @@ var results = results.flatten();
 ```
 
 > In this example we are using 5 iterations. Adding more iterations could cause a memory limit issue. If more iterations are desired, then instead of adding resulting predictions to the interactive map, you can directly export results to Google Drive (batch mode) to prevent the computation from reaching the memory limit. 
+
+## Accuracy assessment
 
 Because model predictions will vary each year due to changes in underlying predictor variables, we withheld data from 2019 for model validation. We use 2019 for out-of-sample model validation as this year had a large number of occurrence records and was the last year the MODIS VCF was available in GEE. We assume that if the model predicts well for withheld data in 2019, then the model likely performed well in other years and is useful for making predictions and studying change over time. We used 125 occurrence records and a set of 125 pseudo-absences randomly created across the study area (within a 100 km buffer around each occurrence location) to estimate the AUC-RP for each of the five individual model predictions using the percentage of tree cover for 2019, together with mean annual temperature, annual precipitation and elevation as the predictor variables.
 
@@ -1236,6 +1286,19 @@ function accuracy(x){
 var AUCPRs = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(accuracy);
 print('AUC of the precision-recall:', AUCPRs);
 print('Mean AUC of the precision-recall', AUCPRs.reduce(ee.Reducer.mean()));
+
+// Function to extract other metrics
+function getMetrics(x){
+  var Classifier = classifiers.get(x);
+  var HSM = pred19.classify(Classifier);
+  var Acc = getAcc(HSM, testingdata2019);
+  return Acc.sort({property:'SUMSS',ascending:false}).first();
+}
+
+// Extract threshold values
+var Metrics = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(getMetrics);
+print('Sensitivity:', ee.FeatureCollection(Metrics).aggregate_array("TPR"));
+print('Specificity:', ee.FeatureCollection(Metrics).aggregate_array("TNR"));
 ```
 
 ![Figure S13. 2019 presence data used for model validation.](./Figures/Fig13.png)
@@ -1244,14 +1307,16 @@ print('Mean AUC of the precision-recall', AUCPRs.reduce(ee.Reducer.mean()));
 
 The individual model accuracy is:
 
-Model | Random Forest AUC-PR
-------|-------|-------
-Run 1 | 0.89 
-Run 2 | 0.81
-Run 3 | 0.78
-Run 4 | 0.80
-Run 5 | 0.72
-**Mean**| **0.80** |
+Model | Random Forest AUC-PR | Sensitivity | Specificity
+------|-------|-------|-------|-------
+Run 1 | 0.89 | 0.81 | 0.85
+Run 2 | 0.82 | 0.83 | 0.76
+Run 3 | 0.78 | 0.77 | 0.84
+Run 4 | 0.83 |0.74 | 0.91
+Run 5 | 0.72 |0.75 | 0.85
+**Mean**| **0.81** | **0.78** | **0.84**|
+
+## Model predictions
 
 After validating our models, we can predict suitable habitat across all years to reflect changes over time in the Terra MODIS VCF image composite. We need to define a function that adds the Terra MODIS VCF of each year to the mean annual temperature, annual precipitation and elevations variables and predicts the habitat suitability for each single model. We then obtain the median habitat suitability per pixel as the final prediction.
 
@@ -1313,6 +1378,7 @@ for (var x = 0; x<3; x++){
 ![Figure S14. Predicted *Cebus capucinus* habitat suitability for 2000.](./Figures/Fig14.png)
 
 ![Figure S15. Predicted *Cebus capucinus* habitat suitability for 2019.](./Figures/Fig15.png)
+## Habitat suitability change assessment 
 
 To assess habitat suitability change across time, we fit a pixel-based linear regression. We applied the `formaTrend()` function to the image collection containing habitat suitability predictions for each year of our 20-year study. This function fits a pixel-based linear regression to identify areas where habitat suitability increased or decreased across the 20-year period. The product is an image with four bands, two of which are of our interest, 1) the slope of the linear regression and 2) a t-test statistic on the significance of the slope. Finally, we create an output map showing the slope of the linear regression at each pixel while using the t-test statistic to mask out any pixels with non-significant trends. Positive values indicate areas that increased in habitat suitability over time and negative values indicate areas that decreased in habitat suitability.
 
@@ -1403,10 +1469,454 @@ Export.image.toDrive({
  });
 ```
 
+# Case Study 3: Modeling species distribution at high spatial resolution using unclassified satellite images as predictor variables
 
-# Case Study 3: 
+In this third case study, we demonstrate the implementation of the SDM workflow combining presence records and unclassified satellite data. The code workflow is very similar to case study 1, with the difference in the predictor variables used and the fact that this analysis has to be run on batch mode to avoid memory limits. Therefore, all results has to be exported to Google Drive. Note that it is possible to run a couple of iterations to quickly visualize results on the interactive map before exporting the model with several iterations.
+
+## Loading data and defining grid size and extent
+
+For this example, we obtained the eBird observation dataset for *Hylocichla mustelina* from GBIF (GBIF.org (12 November 2021); https://doi.org/10.15468/dl.hpjfup) for the month of June (middle of breeding season when observation of migrants is more unlikely) for the years 2018, 2019 and 2020. The dataset was first ingested as an asset.
+
+In the first section we load the data, we set the spatial resolution of the analysis to 90 m. 
+
+We defined the extent of the analysis to the eastern continental USA (4,606,284 km2), limiting the extent to the western observation in the dataset (longitude: -103 degrees). To do this we used the Large Scale International Boundary (LSIB) dataset and filtered the USA. We used the `intersection()` function to limit the geometry to the -103 degrees of longitude.
+
+We rarified the original 99,939 observations to keep one per pixel, resulting in 34,880 observations for modeling. 
+
+```{js, eval=F}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 1 - Load species data, AOI, and remove duplicates
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Load presence data
+var DataRaw = ee.FeatureCollection('users/ramirocrego84/WoodThrush');
+//print('Original data size:', DataRaw.size());
+
+//Define the AOI
+var USA = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017").filter(ee.Filter.eq('country_co','US'));
+var AOI = USA.filter(ee.Filter.eq('country_na','United States')).limit(2).union();
+var AOI = ee.Feature(AOI.first()).geometry();
+var AOI = AOI.intersection(ee.Geometry.Polygon(
+        [[[-103, 49],
+          [-103, 23],
+          [-64, 23],
+          [-64, 49]]]),1000)
+          
+//var Area = AOI.area()
+//var AreaSqKm = ee.Number(Area).divide(1e6).round() //This calculates the area of the AOI in km2
+//print(AreaSqKm)
+
+// Define spatial resolution to work with (m)
+var GrainSize = 90;
+
+function RemoveDuplicates(data){
+  var randomraster = ee.Image.random().reproject('EPSG:4326', null, GrainSize);
+  var randpointvals = randomraster.sampleRegions({collection:ee.FeatureCollection(data), scale: 10, geometries: true});
+  return randpointvals.distinct('random');
+}
+
+DataRaw = DataRaw.filter(ee.Filter.bounds(AOI));
+var Data = RemoveDuplicates(DataRaw)
+print('Final data size:', Data.size());
+
+// Add border of study area to the map
+var outline = ee.Image().byte().paint({
+  featureCollection: AOI, color: 1, width: 3});
+Map.addLayer(outline, {palette: 'FF0000'}, "Study Area");
+
+// Center map to the center of the screen
+Map.centerObject(AOI,3); //Number indicates the zoom level
+
+// Visualize presence points on the map
+Map.addLayer(Data, {color:'red'}, 'Presence', 0);
+```
+
+## Predictor variables
+
+In the next step we select the predictor variables. 
+
+We modeled *Hylocichla mustelina* habitat suitability using atmospherically corrected Landsat 8 surface reflectance (SR) collection 2, Synthetic Aperture Radar (SAR) and temperature products as predictor variables. 
+
+We first loaded and filtered the Landsat 8 SR product to keep only images between the months of April and August and for 2018, 2019, and 2020. We included those months to obtain a cloud free mosaic for the entire study area. 
+
+For each image, we masked bad quality pixels with clouds, cloud shadows and saturated pixels and rescaled pixel values with the appropriate scaling factors using a predefined `maskL8sr()` mask function available in GEE. 
+
+We selected the blue, red, green, near-infrared and shortwave infrared 1 bands for analysis (30 m spatial resolution). 
+
+For each image we also calculated NDVI using the `normilizedDifference()` function available in GEE. 
+
+We finally created a mosaic of the entire study area calculating the median value for each pixel for all Landsat image bands. 
+
+```{js, eval=F}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 2 - Selecting Predictor Variables
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Load and process landsat data
+var l8sr = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+                .filterBounds(AOI)
+                //.filterMetadata('CLOUD_COVER', 'less_than', 100)
+                .filterDate('2018-01-01', '2020-12-31')
+                .filter(ee.Filter.calendarRange({start:5, end:8, field:'month'}));
+                
+
+// Function to mask clouds
+function maskL8sr(image) {
+  // Bit 0 - Fill
+  // Bit 1 - Dilated Cloud
+  // Bit 2 - Cirrus
+  // Bit 3 - Cloud
+  // Bit 4 - Cloud Shadow
+  var qaMask = image.select('QA_PIXEL').bitwiseAnd(parseInt('11111', 2)).eq(0);
+  var saturationMask = image.select('QA_RADSAT').eq(0);
+
+  // Apply the scaling factors to the appropriate bands.
+  var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
+  var thermalBands = image.select('ST_B.*').multiply(0.00341802).add(149.0);
+
+  // Replace the original bands with the scaled ones and apply the masks.
+  return image.addBands(opticalBands, null, true)
+      .addBands(thermalBands, null, true)
+      .updateMask(qaMask)
+      .updateMask(saturationMask);
+}
+
+// Function to rename Landsat 8 bands for cross-Landsat compatibility & rescale
+var renameBandsL8 = function(image) {
+    var imgNewBands = image.select(['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6']).rename(['blue', 'green', 'red', 'nir', 'swir1']);
+    return imgNewBands.copyProperties(image,['system:time_start']);
+};
+
+// Function to compute NDVI
+var addNDVI = function(image) {
+    var ndvi = image.normalizedDifference(['nir', 'red']).rename('ndvi');
+    return image.addBands(ndvi);
+};
+
+// Apply functions
+var l8sr8nocld = l8sr.map(maskL8sr)
+                      .map(renameBandsL8)
+                      .map(addNDVI);
+
+// Create a median composite image (takes the median value from each band across all available images)
+var l8srcompmedian = l8sr8nocld.median();
+```
+
+We also used the 2018, 2019, and 2020 global mosaics of Advanced Land Observing Satellite (ALOS) Phased Arrayed L-band Synthetic Aperture Radar (SAR) HH and HV polarization datasets (25 m spatial resolution). For each pixel of the two bands, we also obtained the median value among the three years. 
+
+```{js, eval=F}
+// Load Radar Data
+var radar = ee.ImageCollection('JAXA/ALOS/PALSAR/YEARLY/SAR')
+                  .filterDate('2018-01-01', '2020-12-31');
+                
+var radar = radar.select(['HH','HV']).median();
+```
+
+Finally, to account for the variation in temperature across the breeding range we included the mean temperature for the month of June (1 km spatial resolution). 
+
+```{js, eval=F}
+// Load WorldClim BIO Variables (a multiband image) from the data catalog
+var juneTemp = ee.ImageCollection('WORLDCLIM/V1/MONTHLY').filter(ee.Filter.eq('month',6)).first().select('tavg');
+```
+
+We then combined all predictor variables into one multiband image.
+
+```{js, eval=F}
+// Combine bands into a single multi-band image
+var predictors = l8srcompmedian.addBands(radar).addBands(juneTemp);
+```
+
+Finally, we masked out all pixels containing permanent water using the global water surface product.
+
+```{js, eval=F}
+// Mask water pixels from the predictor variable image collection
+var watermask = ee.Image("JRC/GSW1_3/GlobalSurfaceWater").select('max_extent').eq(0);
+var predictors = predictors.updateMask(watermask).clip(AOI);
+```
+
+You need to display the resulting images to make sure you have a complete mosaic for the study area with minimal gaps do to clouds or bad quality pixels. We had to modify the filter parameters until the complete Lansdat mosaic was obtained.
+
+```{js, eval=F}
+// Get band names
+var bands = predictors.bandNames();
+
+// Display layers on the map
+Map.addLayer(predictors, {bands:['ndvi'], min: 0, max: 1,  palette: ['white','yellow','green']}, 'NDVI', 0);
+Map.addLayer(predictors, {bands: ['red', 'green', 'blue'], gamma: 1, max: 0, min: 0.2, opacity: 1}, 'L8 SR True color',0);
+Map.addLayer(predictors, {bands:['tavg'], min: 0, max: 300,  palette: ['blue', 'purple', 'cyan', 'green', 'yellow', 'red']}, 'Mean T June', 0);
+```
+
+## Defining spatial blocks for model fitting and cross validation
+
+For this analysis we implemented a two-step environmental profiling technique. We used a cluster with Euclidean distance on 1,000 random selected occurrences to restrict the area for the creation of pseudo-absences to pixels more dissimilar to the environmental profile of the occurrence data.
+
+```{js, eval=F}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 3 - Defining spatial blocks for model fitting and cross validation
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Make an image out of the presence locations. The pixels where we have presence locations will be removed from the area to generate pseudo-absences.
+// This will impede having presence and pseudo-absences in the same pixel. 
+var mask = Data
+  .reduceToImage({
+    properties: ['random'],
+    reducer: ee.Reducer.first()
+}).reproject('EPSG:4326', null, ee.Number(GrainSize));
+
+// Extract local covariate values from multiband predictor image at presence points
+var PixelVals = predictors.sampleRegions({collection: Data.randomColumn({seed:5}).sort('random').limit(1000), properties: [], scale: 30, tileScale: 8});
+// Instantiate the clusterer and train it.
+var clusterer = ee.Clusterer.wekaKMeans({nClusters:2, distanceFunction:"Euclidean", fast: true}).train(PixelVals);
+// Cluster the input using the trained clusterer.
+var ClResult = predictors.cluster(clusterer);
+
+// Retain cluster class mode dissimilar to occurrence data
+var ClMask = ClResult.select(['cluster']).eq(1);
+          
+var AreaForPA =  mask.mask().updateMask(ClMask);
+
+Map.addLayer(AreaForPA, {},'Area to create pseudo-absences', 0);
+```
+
+We implemented a repeated (5-times) spatial block cross validation technique, randomly partitioning 200 x 200 km spatial blocks for model training (70%) and validation (30%) while randomly generating pseudo-absences at each iteration. 
+
+```{js, eval=F}
+// Define a function to create a grid over AOI
+function makeGrid(Geometry, scale) {
+  // pixelLonLat returns an image with each pixel labeled with longitude and
+  // latitude values.
+  var lonLat = ee.Image.pixelLonLat();
+  // Select the longitude and latitude bands, multiply by a large number then
+  // truncate them to integers.
+  var lonGrid = lonLat
+    .select('longitude')
+    .multiply(100000)
+    .toInt();
+  var latGrid = lonLat
+    .select('latitude')
+    .multiply(100000)
+    .toInt();
+  return lonGrid
+    .multiply(latGrid)
+    .reduceToVectors({
+      geometry: Geometry,
+      scale: scale,
+      geometryType: 'polygon',
+    });
+}
+// Create grid and remove cells outside AOI
+var Scale = 200000; // Set range in m to create spatial blocks
+var Grid = makeGrid(AOI, Scale);
+Map.addLayer(Grid, {},'Grid for spatail block cross validation', 0);
+```
+
+## Fitting SDM models
+
+For the analysis, we generated an equal number of pseudo-absences as occurrence data for each of the 5 datasets. We fit a random forest model (500 trees) to each individual training dataset and then averaged model outputs to calculate the mean habitat suitability of the five iterations. 
+
+```{js, eval=F}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 4 - Fitting SDM models
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Define SDM function
+// Activate the desired classifier, random forest or gradient boosting. 
+// Note that other algorithms are available in GEE. See ee.Classifiers on the documentation for more information.
+
+function SDM(x) {
+    var Seed = ee.Number(x);
+    // Randomly split blocks for training and validation
+    var GRID = ee.FeatureCollection(Grid).randomColumn({seed:Seed}).sort('random');
+    var TrainingGrid = GRID.filter(ee.Filter.lt('random', split));  // Filter points with 'random' property < split percentage
+    var TestingGrid = GRID.filter(ee.Filter.gte('random', split));  // Filter points with 'random' property >= split percentage
+
+    // Presence
+    var PresencePoints = ee.FeatureCollection(Data);
+    PresencePoints = PresencePoints.map(function(feature){return feature.set('PresAbs', 1)});
+    var TrPresencePoints = PresencePoints.filter(ee.Filter.bounds(TrainingGrid));  // Filter points with 'random' property < split percentage
+    var TePresencePoints = PresencePoints.filter(ee.Filter.bounds(TestingGrid));  // Filter points with 'random' property >= split percentage
+
+    // Pseudo-absences
+    var TrPseudoAbsPoints = AreaForPA.sample({region: TrainingGrid, scale: GrainSize, numPixels: TrPresencePoints.size(), seed:Seed, geometries: true, tileScale: 16}); // We add extra points to account for those points that land in masked areas of the raster and are discarded. This ensures a balanced presence/pseudo-absence data set
+    TrPseudoAbsPoints = TrPseudoAbsPoints.randomColumn().sort('random').limit(ee.Number(TrPresencePoints.size())); //Randomly retain the same number of pseudo-absences as presence data 
+    TrPseudoAbsPoints = TrPseudoAbsPoints.map(function(feature){
+        return feature.set('PresAbs', 0);
+        });
+ 
+    var TePseudoAbsPoints = AreaForPA.sample({region: TestingGrid, scale: GrainSize, numPixels: TePresencePoints.size(), seed:Seed, geometries: true, tileScale: 16}); // We add extra points to account for those points that land in masked areas of the raster and are discarded. This ensures a balanced presence/pseudo-absence data set
+    TePseudoAbsPoints = TePseudoAbsPoints.randomColumn().sort('random').limit(ee.Number(TePresencePoints.size())); //Randomly retain the same number of pseudo-absences as presence data 
+    TePseudoAbsPoints = TePseudoAbsPoints.map(function(feature){
+        return feature.set('PresAbs', 0);
+        });
+
+    // Merge points
+    var trainingPartition = TrPresencePoints.merge(TrPseudoAbsPoints);
+    var testingPartition = TePresencePoints.merge(TePseudoAbsPoints);
+
+    // Extract local covariate values from multiband predictor image at training points
+    var trainPixelVals = predictors.sampleRegions({collection: trainingPartition, properties: ['PresAbs'], scale: GrainSize, tileScale: 16, geometries: false});
+
+    // Classify using random forest
+    var Classifier = ee.Classifier.smileRandomForest({
+       numberOfTrees: 500, //The number of decision trees to create.
+       variablesPerSplit: null, //The number of variables per split. If unspecified, uses the square root of the number of variables.
+       minLeafPopulation: 10,//Only create nodes whose training set contains at least this many points. Integer, default: 1
+       bagFraction: 0.5,//The fraction of input to bag per tree. Default: 0.5.
+       maxNodes: null,//The maximum number of leaf nodes in each tree. If unspecified, defaults to no limit.
+       seed: Seed//The randomization seed.
+      });
+  
+    // Presence probability 
+    var ClassifierPr = Classifier.setOutputMode('PROBABILITY').train(trainPixelVals, 'PresAbs', bands); 
+    var ClassifiedImgPr = predictors.select(bands).classify(ClassifierPr);
+
+    // Binary presence/absence map
+    //var ClassifierBin = Classifier.setOutputMode('CLASSIFICATION').train(trainPixelVals, 'PresAbs', bands); 
+    //var ClassifiedImgBin = predictors.select(bands).classify(ClassifierBin);
+   
+    return ee.List([ClassifiedImgPr, testingPartition]);
+}
 
 
+// Define partition for training and testing data
+var split = 0.70;  // The proportion of the blocks used to select training data
+
+// Define number of repetitions
+var numiter = 5;
+
+// Fit SDM 
+var results = ee.List([55,7,25,65,23]).map(SDM);
+
+// Extract results from list
+var results = results.flatten();
+```
+
+```{js, eval=F}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 5 - Extracting and displaying model prediction results
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Habitat suitability
+
+// Extract all model predictions
+var images = ee.List.sequence(0,ee.Number(numiter).multiply(2).subtract(1),2).map(function(x){
+  return results.get(x)});
+
+// Calculate mean of all individual model runs
+var ModelAverage = ee.ImageCollection.fromImages(images).mean();
+```
+
+## Accuracy assessment
+
+We assessed model accuracy calculating the AUC-PR, sensitivity, and specificity on the validation dataset of each model iteration. To obtain a binary potential distribution map we used the mean threshold that maximized the sum of sensitivity and specificity of each of the individual model predictions. 
+
+```{js, eval=F}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 6 - Accuracy assessment
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Extract testing/validation datasets
+var TestingDatasets = ee.List.sequence(1,ee.Number(numiter).multiply(2).subtract(1),2).map(function(x){
+                      return results.get(x)});
+
+// Double check that you have a satisfactory number of points for model validation
+// print('Number of presence and pseudo-absence points for model validation', ee.List.sequence(0,ee.Number(numiter).subtract(1),1)
+// .map(function(x){
+//   return ee.List([ee.FeatureCollection(TestingDatasets.get(x)).filter(ee.Filter.eq('PresAbs',1)).size(),
+//         ee.FeatureCollection(TestingDatasets.get(x)).filter(ee.Filter.eq('PresAbs',0)).size()]);
+// })
+// );
+
+// Define functions to estimate sensitivity, specificity and precision.
+function getAcc(img,TP){
+  var Pr_Prob_Vals = img.sampleRegions({collection: TP, properties: ['PresAbs'], scale: GrainSize, tileScale: 16});
+  var seq = ee.List.sequence({start: 0, end: 1, count: 25});
+  return ee.FeatureCollection(seq.map(function(cutoff) {
+  var Pres = Pr_Prob_Vals.filterMetadata('PresAbs','equals',1);
+  // true-positive and true-positive rate, sensitivity  
+  var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
+  var TPR = TP.divide(Pres.size());
+  var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
+  // true-negative rate, specificity  
+  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-positive and false-positive rate
+  var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
+  var FPR = FP.divide(Abs.size());
+  // precision
+  var Precision = TP.divide(TP.add(FP));
+  // sum of sensitivity and specificity
+  var SUMSS = TPR.add(TNR);
+  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  }));
+}
+
+
+// Calculate AUC of Precision Recall Curve
+
+function getAUCPR(roc){
+  var X = ee.Array(roc.aggregate_array('TPR'));
+  var Y = ee.Array(roc.aggregate_array('Precision')); 
+  var X1 = X.slice(0,1).subtract(X.slice(0,0,-1));
+  var Y1 = Y.slice(0,1).add(Y.slice(0,0,-1));
+  return X1.multiply(Y1).multiply(0.5).reduce('sum',[0]).abs().toList().get(0);
+}
+
+function AUCPRaccuracy(x){
+  var HSM = ee.Image(images.get(x));
+  var TData = ee.FeatureCollection(TestingDatasets.get(x));
+  var Acc = getAcc(HSM, TData);
+  return getAUCPR(Acc);
+}
+
+var AUCPRs = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(AUCPRaccuracy);
+
+// Function to extract other metrics
+function getMetrics(x){
+  var HSM = ee.Image(images.get(x));
+  var TData = ee.FeatureCollection(TestingDatasets.get(x));
+  var Acc = getAcc(HSM, TData);
+  return Acc.sort({property:'SUMSS',ascending:false}).first();
+}
+
+// Extract sensitivity, specificity and mean threshold values
+var Metrics = ee.List.sequence(0,ee.Number(numiter).subtract(1),1).map(getMetrics);
+```
+
+## Exporting model outputs
+
+We ran the model in batch mode, exporting the results to Google Drive. 
+
+```{js, eval=F}
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Section 7 - Export outputs
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Export final model to drive
+
+Export.image.toDrive({
+  image: ModelAverage, //Object to export
+  description: 'HSI', //Name of the file
+  scale: GrainSize, //Spatial resolution of the exported raster
+  maxPixels: 1e10,
+  region: AOI //Area of interest
+});
+
+Export.table.toDrive({
+  collection: ee.FeatureCollection(AUCPRs
+                        .map(function(element){
+                        return ee.Feature(null,{AUCPR:element})})),
+  description: 'AUCPR',
+  fileFormat: 'CSV',
+});
+
+Export.table.toDrive({
+  collection: ee.FeatureCollection(Metrics),
+  description: 'Metrics',
+  fileFormat: 'CSV',
+});
+```
+
+Because exporting results for this analysis take a long period of time, instead of directly exporting the binary presence-absence map, we manually calculated the average threshold from the exported metrics and set the threshold on the visualization parameters in QGIS.
 
 
 # Code to model presence-absence data
@@ -1895,17 +2405,23 @@ Araújo, M. B., Anderson, R. P., Barbosa, A. M., Beale, C. M., Dormann, C. F., E
 
 Barbet-Massin, M., Jiguet, F., Albert, C. H., & Thuiller, W. (2012). Selecting pseudo-absences for species distribution models: How, where and how many? Methods in Ecology and Evolution, 3(2), 327–338. https://doi.org/10.1111/j.2041-210X.2011.00172.x
 
+Chefaoui, R. M., & Lobo, J. M. (2008). Assessing the effects of pseudo-absences on predictive distribution model performance. Ecological Modelling, 210(4), 478–486. https://doi.org/10.1016/j.ecolmodel.2007.08.010
+
 Evans, J. S., Murphy, M. A., Holden, Z. A., & Cushman, S. A. (2011). Modeling Species Distribution and Change Using Random Forest. In C. A. Drew, Y. F. Wiersma, & F. Huettmann (Eds.), Predictive Species and Habitat Modeling in Landscape Ecology: Concepts and Applications (pp. 139–159). New York, NY: Springer New York. https://doi.org/10.1007/978-1-4419-7390-0_8
 
 Farr, T. G., Rosen, P. A., Caro, E., Crippen, R., Duren, R., Hensley, S., Kobrick, M., Paller, M., Rodriguez, E., Roth, L., Seal, D., Shaffer, S., Shimada, J., Umland, J., Werner, M., Oskin, M., Burbank, D., &Alsdorf, D. (2007). The shuttle radar topography mission. Reviews of Geophysics, 45(2), RG2004. https://doi.org/10.1029/2005RG000183
 
 Fielding, A. H., & Bell, J. F. (1997). A review of methods for the assessment of prediction errors in conservation presence/absence models. Environmental Conservation, 24(1), 38–49. https://doi.org/10.1017/S0376892997000088
 
+Guisan, A., Thuiller, W., & Zimmermann, N. (2017). Habitat Suitability and Distribution Models: With Applications in R. Cambridge, UK.: Cambridge University Press. https://doi.org/doi:10.1017/9781139028271
+
 Hijmans, R.J., Cameron, S.E., Parra, J.L., Jones, P.G., & Jarvis, A. (2005). Very High Resolution Interpolated Climate Surfaces for Global Land Areas. International Journal of Climatology 25: 1965-1978.
 
 Hijmans, R. J., Phillips, S., Leathwick, J., & Elith, J. (2017). dismo: Species distribution modeling. R package version 1.1-4.
 
 Kindt, R. (2018). Ensemble species distribution modelling with transformed suitability values. Environmental Modelling and Software, 100, 136–145. https://doi.org/10.1016/j.envsoft.2017.11.009
+
+Leroy, B., Delsol, R., Hugueny, B., Meynard, C. N., Barhoumi, C., Barbet-Massin, M., & Bellard, C. (2018). Without quality presence–absence data, discrimination metrics such as TSS can be misleading measures of model performance. Journal of Biogeography, 45(9), 1994–2002. https://doi.org/10.1111/jbi.13402
 
 Liu, C., Newell, G., & White, M. (2016). On the selection of thresholds for predicting species occurrence with presence-only data. Ecology and Evolution, 6(1), 337–348. https://doi.org/10.1002/ece3.1878
 
@@ -1920,6 +2436,10 @@ Phillips, S. J., Anderson, R. P., & Schapire, R. E. (2006). Maximum entropy mode
 Phillips, S. J., Dudík, M., Elith, J., Graham, C. H., Lehmann, A., Leathwick, J., & Ferrier, S. (2009). Sample selection bias and presence-only distribution models: Implications for background and pseudo-absence data. Ecological Applications, 19(1), 181–197. https://doi.org/10.1890/07-2153.1
 
 Roberts, D. R., Bahn, V., Ciuti, S., Boyce, M. S., Elith, J., Guillera-Arroita, G., Hauenstein, S., Lahoz-Monford, J. J., Schröder, B., Thuiller, W., Warton, D. I., Wintle, B. A., Hartig, F., & Dormann, C. F. (2017). Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure. Ecography, 40(8), 913–929. https://doi.org/10.1111/ecog.02881
+
+Senay, S. D., Worner, S. P., & Ikeda, T. (2013). Novel Three-Step Pseudo-Absence Selection Technique for Improved Species Distribution Modelling. PLoS ONE, 8(8). https://doi.org/10.1371/journal.pone.0071218
+
+Sillero, N., Arenas-Castro, S., Enriquez‐Urzelai, U., Vale, C. G., Sousa-Guedes, D., Martínez-Freiría, F., … Barbosa, A. M. (2021). Want to model a species niche? A step-by-step guideline on correlative ecological niche modelling. Ecological Modelling, 456. https://doi.org/10.1016/j.ecolmodel.2021.109671
 
 Sofaer, H. R., Hoeting, J. A., & Jarnevich, C. S. (2019). The area under the precision-recall curve as a performance metric for rare binary events. Methods in Ecology and Evolution, 10(4), 565–577. https://doi.org/10.1111/2041-210X.13140
 
