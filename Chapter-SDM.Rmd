@@ -729,8 +729,11 @@ function getAcc(img,TP){
   var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
   var TPR = TP.divide(Pres.size());
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
-  // true-negative rate, specificity  
-  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-negative
+  var FN = ee.Number(Pres.filterMetadata('classification','less_than',cutoff).size());
+  // true-negative and true-negative rate, specificity  
+  var TN = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size());
+  var TNR = TN.divide(Abs.size());
   // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
@@ -738,7 +741,7 @@ function getAcc(img,TP){
   var Precision = TP.divide(TP.add(FP));
   // sum of sensitivity and specificity
   var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  return ee.Feature(null,{cutoff: cutoff, TP:TP, TN:TN, FP:FP, FN:FN, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
   }));
 }
 
@@ -1543,7 +1546,7 @@ For each image, we masked bad quality pixels with clouds, cloud shadows and satu
 
 We selected the blue, red, green, near-infrared and shortwave infrared 1 bands for analysis (30 m spatial resolution). 
 
-For each image we also calculated NDVI using the `normilizedDifference()` function available in GEE. 
+For each image we also calculated NDVI using the `normalizedDifference()` function available in GEE. 
 
 We finally created a mosaic of the entire study area calculating the median value for each pixel for all Landsat image bands. 
 
@@ -1837,8 +1840,11 @@ function getAcc(img,TP){
   var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
   var TPR = TP.divide(Pres.size());
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
-  // true-negative rate, specificity  
-  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-negative
+  var FN = ee.Number(Pres.filterMetadata('classification','less_than',cutoff).size());
+  // true-negative and true-negative rate, specificity  
+  var TN = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size());
+  var TNR = TN.divide(Abs.size());
   // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
@@ -1846,7 +1852,7 @@ function getAcc(img,TP){
   var Precision = TP.divide(TP.add(FP));
   // sum of sensitivity and specificity
   var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  return ee.Feature(null,{cutoff: cutoff, TP:TP, TN:TN, FP:FP, FN:FN, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
   }));
 }
 
@@ -2279,8 +2285,11 @@ function getAcc(img,TP){
   var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
   var TPR = TP.divide(Pres.size());
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
-  // true-negative rate, specificity  
-  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-negative
+  var FN = ee.Number(Pres.filterMetadata('classification','less_than',cutoff).size());
+  // true-negative and true-negative rate, specificity  
+  var TN = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size());
+  var TNR = TN.divide(Abs.size());
   // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
@@ -2288,7 +2297,7 @@ function getAcc(img,TP){
   var Precision = TP.divide(TP.add(FP));
   // sum of sensitivity and specificity
   var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  return ee.Feature(null,{cutoff: cutoff, TP:TP, TN:TN, FP:FP, FN:FN, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
   }));
 }
 
