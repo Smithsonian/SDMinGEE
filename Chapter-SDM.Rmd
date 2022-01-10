@@ -1715,7 +1715,7 @@ Map.addLayer(Grid, {},'Grid for spatail block cross validation', 0);
 
 ## Fitting SDM models
 
-For the analysis, we generated an equal number of pseudo-absences as occurrence data for each of the 5 datasets. We fit a random forest model (500 trees) to each individual training dataset and then averaged model outputs to calculate the mean habitat suitability of the five iterations. 
+For the analysis, we generated an equal number of pseudo-absences as occurrence data for each of the 5 datasets. To ensure the equal number of pseudo-absences, we hard coded 50000 random points as likely, many will be created on masked pixels of the extent of the random blocks and discarded. Hence, to ensure same number of pseudo-absence than presence points, we first create 50000 and then limit to the equal number of presence. We fit a random forest model (500 trees) to each individual training dataset and then averaged model outputs to calculate the mean habitat suitability of the five iterations. 
 
 ```{js, eval=F}
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1740,7 +1740,7 @@ function SDM(x) {
     var TePresencePoints = PresencePoints.filter(ee.Filter.bounds(TestingGrid));  // Filter points with 'random' property >= split percentage
 
     // Pseudo-absences
-    var TrPseudoAbsPoints = AreaForPA.sample({region: TrainingGrid, scale: GrainSize, numPixels: TrPresencePoints.size(), seed:Seed, geometries: true, tileScale: 16}); // We add extra points to account for those points that land in masked areas of the raster and are discarded. This ensures a balanced presence/pseudo-absence data set
+    var TrPseudoAbsPoints = AreaForPA.sample({region: TrainingGrid, scale: GrainSize, numPixels: 50000, seed:Seed, geometries: true, tileScale: 16}); // We add extra points to account for those points that land in masked areas of the raster and are discarded. This ensures a balanced presence/pseudo-absence data set
     TrPseudoAbsPoints = TrPseudoAbsPoints.randomColumn().sort('random').limit(ee.Number(TrPresencePoints.size())); //Randomly retain the same number of pseudo-absences as presence data 
     TrPseudoAbsPoints = TrPseudoAbsPoints.map(function(feature){
         return feature.set('PresAbs', 0);
