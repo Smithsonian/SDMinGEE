@@ -386,8 +386,8 @@ var clusterer = ee.Clusterer.wekaKMeans({nClusters:2, distanceFunction:"Euclidea
 var Clresult = predictors.cluster(clusterer);
 // Display cluster results and identify the cluster ID similar and dissimilar to presence data
 right.addLayer(Clresult.randomVisualizer(), {}, 'Clusters', 0);
-// Mask cluster that is disimilar to presence data. In this case, cluster 1.
-// Obtain the ID of the cluster similar to data and use the oposite to define the area to create pseudo-absences.
+// Mask cluster that is dissimilar to presence data.
+// Obtain the ID of the cluster similar to data and use the opposite to define the area to create pseudo-absences.
 var clustID = Clresult.sampleRegions({collection: Data.randomColumn().sort('random').limit(200), properties: [], tileScale: 16, scale: GrainSize});
 clustID = ee.FeatureCollection(clustID).reduceColumns(ee.Reducer.mode(),['cluster']);
 clustID = ee.Number(clustID.get('mode')).subtract(1).abs();
@@ -713,8 +713,11 @@ function getAcc(img,TP){
   var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
   var TPR = TP.divide(Pres.size());
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
-  // true-negative rate, specificity  
-  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-negative
+  var FN = ee.Number(Pres.filterMetadata('classification','less_than',cutoff).size());
+  // true-negative and true-negative rate, specificity  
+  var TN = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size());
+  var TNR = TN.divide(Abs.size());
   // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
@@ -722,7 +725,7 @@ function getAcc(img,TP){
   var Precision = TP.divide(TP.add(FP));
   // sum of sensitivity and specificity
   var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  return ee.Feature(null,{cutoff: cutoff, TP:TP, TN:TN, FP:FP, FN:FN, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
   }));
 }
 
@@ -1527,7 +1530,7 @@ For each image, we masked bad quality pixels with clouds, cloud shadows and satu
 
 We selected the blue, red, green, near-infrared and shortwave infrared 1 bands for analysis (30 m spatial resolution). 
 
-For each image we also calculated NDVI using the `normilizedDifference()` function available in GEE. 
+For each image we also calculated NDVI using the `normalizedDifference()` function available in GEE. 
 
 We finally created a mosaic of the entire study area calculating the median value for each pixel for all Landsat image bands. 
 
@@ -1696,7 +1699,7 @@ Map.addLayer(Grid, {},'Grid for spatail block cross validation', 0);
 
 ## Fitting SDM models
 
-For the analysis, we generated an equal number of pseudo-absences as occurrence data for each of the 5 datasets. We fit a random forest model (500 trees) to each individual training dataset and then averaged model outputs to calculate the mean habitat suitability of the five iterations. 
+For the analysis, we generated an equal number of pseudo-absences as occurrence data for each of the 5 datasets. To ensure the equal number of pseudo-absences, we hard coded 50000 random points as likely, many will be created on masked pixels of the extent of the random blocks and discarded. Hence, to ensure same number of pseudo-absence than presence points, we first create 50000 and then limit to the equal number of presence. We fit a random forest model (500 trees) to each individual training dataset and then averaged model outputs to calculate the mean habitat suitability of the five iterations. 
 
 ```{js, eval=F}
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1721,7 +1724,7 @@ function SDM(x) {
     var TePresencePoints = PresencePoints.filter(ee.Filter.bounds(TestingGrid));  // Filter points with 'random' property >= split percentage
 
     // Pseudo-absences
-    var TrPseudoAbsPoints = AreaForPA.sample({region: TrainingGrid, scale: GrainSize, numPixels: TrPresencePoints.size(), seed:Seed, geometries: true, tileScale: 16}); // We add extra points to account for those points that land in masked areas of the raster and are discarded. This ensures a balanced presence/pseudo-absence data set
+    var TrPseudoAbsPoints = AreaForPA.sample({region: TrainingGrid, scale: GrainSize, numPixels: 50000, seed:Seed, geometries: true, tileScale: 16}); // We add extra points to account for those points that land in masked areas of the raster and are discarded. This ensures a balanced presence/pseudo-absence data set
     TrPseudoAbsPoints = TrPseudoAbsPoints.randomColumn().sort('random').limit(ee.Number(TrPresencePoints.size())); //Randomly retain the same number of pseudo-absences as presence data 
     TrPseudoAbsPoints = TrPseudoAbsPoints.map(function(feature){
         return feature.set('PresAbs', 0);
@@ -1821,8 +1824,11 @@ function getAcc(img,TP){
   var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
   var TPR = TP.divide(Pres.size());
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
-  // true-negative rate, specificity  
-  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-negative
+  var FN = ee.Number(Pres.filterMetadata('classification','less_than',cutoff).size());
+  // true-negative and true-negative rate, specificity  
+  var TN = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size());
+  var TNR = TN.divide(Abs.size());
   // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
@@ -1830,7 +1836,7 @@ function getAcc(img,TP){
   var Precision = TP.divide(TP.add(FP));
   // sum of sensitivity and specificity
   var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  return ee.Feature(null,{cutoff: cutoff, TP:TP, TN:TN, FP:FP, FN:FN, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
   }));
 }
 
@@ -2263,8 +2269,11 @@ function getAcc(img,TP){
   var TP =  ee.Number(Pres.filterMetadata('classification','greater_than',cutoff).size());
   var TPR = TP.divide(Pres.size());
   var Abs = Pr_Prob_Vals.filterMetadata('PresAbs','equals',0);
-  // true-negative rate, specificity  
-  var TNR = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size()).divide(Abs.size());
+  // false-negative
+  var FN = ee.Number(Pres.filterMetadata('classification','less_than',cutoff).size());
+  // true-negative and true-negative rate, specificity  
+  var TN = ee.Number(Abs.filterMetadata('classification','less_than',cutoff).size());
+  var TNR = TN.divide(Abs.size());
   // false-positive and false-positive rate
   var FP = ee.Number(Abs.filterMetadata('classification','greater_than',cutoff).size());
   var FPR = FP.divide(Abs.size());
@@ -2272,7 +2281,7 @@ function getAcc(img,TP){
   var Precision = TP.divide(TP.add(FP));
   // sum of sensitivity and specificity
   var SUMSS = TPR.add(TNR);
-  return ee.Feature(null,{cutoff: cutoff, TPR:TPR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
+  return ee.Feature(null,{cutoff: cutoff, TP:TP, TN:TN, FP:FP, FN:FN, TPR:TPR, TNR:TNR, FPR:FPR, Precision:Precision, SUMSS:SUMSS});
   }));
 }
 

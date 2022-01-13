@@ -1,6 +1,6 @@
 ---
 title: "Supplemental Materials - Appendix 1 - Implementation of species distribution models in Google Earth Engine"
-author: "Ramiro D. Crego ^1,2^, Jared A. Stabach ^1^ and Grand Connette ^1,2^"
+author: "Ramiro D. Crego ^1,2^, Jared A. Stabach ^1^ and Grant Connette ^1,2^"
 date: "`r Sys.Date()`"
 output:
   prettydoc::html_pretty:
@@ -402,8 +402,8 @@ var clusterer = ee.Clusterer.wekaKMeans({nClusters:2, distanceFunction:"Euclidea
 var Clresult = predictors.cluster(clusterer);
 // Display cluster results and identify the cluster ID similar and dissimilar to presence data
 right.addLayer(Clresult.randomVisualizer(), {}, 'Clusters', 0);
-// Mask cluster that is disimilar to presence data. In this case, cluster 1.
-// Obtain the ID of the cluster similar to data and use the oposite to define the area to create pseudo-absences.
+// Mask cluster that is dissimilar to presence data.
+// Obtain the ID of the cluster similar to data and use the opposite to define the area to create pseudo-absences.
 var clustID = Clresult.sampleRegions({collection: Data.randomColumn().sort('random').limit(200), properties: [], tileScale: 16, scale: GrainSize});
 clustID = ee.FeatureCollection(clustID).reduceColumns(ee.Reducer.mode(),['cluster']);
 clustID = ee.Number(clustID.get('mode')).subtract(1).abs();
