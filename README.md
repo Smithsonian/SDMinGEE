@@ -9,7 +9,7 @@ b - Working Land and Seascapes, Conservation Commons, Smithsonian Institution, W
 
 The Google Earth Engine code and data used in this study are freely available at the following Google Earth Engine repository: https://code.earthengine.google.com/?accept_repo=users/ramirocrego84/SDM_Manuscript
 
-The tutorial to use the code to fit species distribution models in Google Earth Engine is available at: https://turbo-waddle-5e55336c.pages.github.io/
+The tutorial to use the code to fit species distribution models in Google Earth Engine is available at: https://smithsonian.github.io/SDMinGEE/
 
 Dr. Crego is a postdoctoral researcher at the Smithsonian Conservation Biology Institute (USA). He specializes in spatial ecology and conservation biology. He uses a combination of field data collection, remote sensing, and advanced modeling to investigate how species adapt to rapid global changes.
 
