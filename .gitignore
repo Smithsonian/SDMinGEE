@@ -4,4 +4,5 @@
 *.Ruserdata
 tutorial.Rmd
 SDM-GEE.Rproj.user
+/Figures
 
