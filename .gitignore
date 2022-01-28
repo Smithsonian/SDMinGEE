@@ -3,5 +3,5 @@
 *.RData
 *.Ruserdata
 tutorial.Rmd
-SDM-GEE.Rproj
-.Rproj.user
+SDM-GEE.Rproj.user
+
