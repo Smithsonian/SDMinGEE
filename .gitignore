@@ -1,8 +1,7 @@
 *.Rhistory
 *.RData
 *.Ruserdata
+*.Rproj.user
 tutorial.Rmd
 SDM-GEE.Rproj
 /Figures
-
-.Rproj.user
